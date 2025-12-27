@@ -39,3 +39,6 @@ luac.out
 *.x86_64
 *.hex
 
+
+# Claude instructions (should not be committed)
+CLAUDE.md

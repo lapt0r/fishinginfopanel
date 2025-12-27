@@ -1,0 +1,559 @@
+FishingInfoPanel = {}
+local FIP = FishingInfoPanel
+
+-- Initialize saved variables structure
+local function InitDB()
+	if not FishingInfoPanelDB then
+		FishingInfoPanelDB = {
+			allTime = {}, -- [zone][subzone][itemID] = count
+			currentSession = {},
+			sessionStart = time(),
+			-- New skill-based tracking
+			bySkill = {}, -- [skillRange][itemID] = count
+			-- Configuration settings
+			config = {
+				showCatchMessages = true,
+				debugLogging = false
+			}
+		}
+	end
+
+	-- Migrate old data if needed
+	if not FishingInfoPanelDB.bySkill then
+		FishingInfoPanelDB.bySkill = {}
+	end
+	
+	-- Add config if missing (for existing users)
+	if not FishingInfoPanelDB.config then
+		FishingInfoPanelDB.config = {
+			showCatchMessages = true,
+			debugLogging = false
+		}
+	end
+
+	-- Reset current session on login
+	FishingInfoPanelDB.currentSession = {}
+	FishingInfoPanelDB.sessionStart = time()
+end
+
+-- State
+FIP.showingAllTime = false
+FIP.showingBySkill = false
+FIP.currentZone = ""
+FIP.currentSubzone = ""
+FIP.currentSkillRange = ""
+FIP.fishRows = {}
+
+-- Get current location
+local function GetCurrentLocation()
+	local zone = GetRealZoneText() or "Unknown"
+	local subzone = GetSubZoneText() or "Unknown"
+	return zone, subzone
+end
+
+-- Get current fishing skill
+local function GetFishingSkill()
+	local prof1, prof2, archaeology, fishing, cooking = GetProfessions()
+	if fishing then
+		local name, icon, skillLevel, maxSkillLevel, numAbilities, spelloffset, skillLine, skillModifier = GetProfessionInfo(fishing)
+		-- Total skill includes base skill + modifiers (lures, etc)
+		local totalSkill = (skillLevel or 0) + (skillModifier or 0)
+		return totalSkill, skillLevel, skillModifier
+	end
+	return 0, 0, 0
+end
+
+-- Get skill range for grouping (e.g., "0-50", "51-100", etc.)
+local function GetSkillRange(skill)
+	if skill <= 50 then return "1-50"
+	elseif skill <= 100 then return "51-100"
+	elseif skill <= 150 then return "101-150"
+	elseif skill <= 200 then return "151-200"
+	elseif skill <= 250 then return "201-250"
+	elseif skill <= 300 then return "251-300"
+	elseif skill <= 350 then return "301-350"
+	elseif skill <= 400 then return "351-400"
+	elseif skill <= 450 then return "401-450"
+	else return "451+"
+	end
+end
+
+-- Record a fish catch
+function FIP:RecordCatch(itemID)
+	local zone, subzone = GetCurrentLocation()
+	local totalSkill, baseSkill, modifier = GetFishingSkill()
+	local skillRange = GetSkillRange(totalSkill)
+
+	-- Initialize structures if needed
+	FishingInfoPanelDB.allTime[zone] = FishingInfoPanelDB.allTime[zone] or {}
+	FishingInfoPanelDB.allTime[zone][subzone] = FishingInfoPanelDB.allTime[zone][subzone] or {}
+
+	FishingInfoPanelDB.currentSession[zone] = FishingInfoPanelDB.currentSession[zone] or {}
+	FishingInfoPanelDB.currentSession[zone][subzone] = FishingInfoPanelDB.currentSession[zone][subzone] or {}
+
+	FishingInfoPanelDB.bySkill[skillRange] = FishingInfoPanelDB.bySkill[skillRange] or {}
+
+	-- Increment counts
+	FishingInfoPanelDB.allTime[zone][subzone][itemID] = (FishingInfoPanelDB.allTime[zone][subzone][itemID] or 0) + 1
+	FishingInfoPanelDB.currentSession[zone][subzone][itemID] = (FishingInfoPanelDB.currentSession[zone][subzone][itemID] or 0) + 1
+	FishingInfoPanelDB.bySkill[skillRange][itemID] = (FishingInfoPanelDB.bySkill[skillRange][itemID] or 0) + 1
+
+	-- Catch logging (if enabled)
+	if FishingInfoPanelDB.config.showCatchMessages then
+		local itemName = GetItemInfo(itemID) or ("Item " .. itemID)
+		print(string.format("|cff00ff00FishingInfoPanel:|r Caught %s (%d)", 
+			itemName, totalSkill))
+	end
+	
+	-- Debug logging (if enabled)
+	if FishingInfoPanelDB.config.debugLogging then
+		local itemName = GetItemInfo(itemID) or ("Item " .. itemID)
+		print(string.format("|cff00ff00FishingInfoPanel Debug:|r Caught %s (Total: %d [Base: %d + Modifier: %d]) in %s - %s (Range: %s)", 
+			itemName, totalSkill, baseSkill, modifier, zone, subzone, skillRange))
+	end
+
+	-- Update display if showing current zone
+	if FishingInfoPanelFrame:IsShown() then
+		FIP:UpdateDisplay()
+	end
+end
+
+-- Calculate percentages and get fish data
+local function GetFishData(zone, subzone, useAllTime)
+	local data = useAllTime and FishingInfoPanelDB.allTime or FishingInfoPanelDB.currentSession
+	local allTimeData = FishingInfoPanelDB.allTime[zone] and FishingInfoPanelDB.allTime[zone][subzone]
+
+	-- If showing session, but no all-time data exists, use session data only
+	if not useAllTime and not allTimeData then
+		if not data[zone] or not data[zone][subzone] then
+			return {}
+		end
+	elseif not data[zone] or not data[zone][subzone] then
+		-- If showing all-time and no data, return empty
+		if useAllTime then
+			return {}
+		end
+		-- If showing session and no session data, create empty structure
+		data[zone] = data[zone] or {}
+		data[zone][subzone] = {}
+	end
+
+	local fishData = {}
+	local junkData = {
+		itemID = "JUNK",
+		name = "Junk",
+		icon = "Interface\\Icons\\INV_Misc_Bag_10",  -- Generic bag icon for junk
+		count = 0,
+		percentage = 0,
+		color = {0.5, 0.5, 0.5}  -- Gray color for junk
+	}
+	local total = 0
+
+	-- Calculate total for current view
+	if data[zone] and data[zone][subzone] then
+		for itemID, count in pairs(data[zone][subzone]) do
+			total = total + count
+		end
+	end
+
+	-- When showing session, include all items from all-time with 0 counts
+	local itemsToProcess = {}
+	
+	-- First, add all current data items
+	if data[zone] and data[zone][subzone] then
+		for itemID, count in pairs(data[zone][subzone]) do
+			itemsToProcess[itemID] = count
+		end
+	end
+	
+	-- If showing session, add any all-time items not in session with 0 count
+	if not useAllTime and allTimeData then
+		for itemID, _ in pairs(allTimeData) do
+			if not itemsToProcess[itemID] then
+				itemsToProcess[itemID] = 0
+			end
+		end
+	end
+
+	-- Build fish data with percentages
+	for itemID, count in pairs(itemsToProcess) do
+		local itemName, _, itemQuality, _, _, _, _, _, _, itemIcon = GetItemInfo(itemID)
+
+		-- Check if item is junk (gray quality = 0)
+		if itemQuality == 0 then
+			junkData.count = junkData.count + count
+		else
+			local currentPct = total > 0 and (count / total) * 100 or 0
+			local color = {1, 1, 1} -- white default
+
+			-- Compare to all-time if showing session
+			if not useAllTime and FishingInfoPanelDB.allTime[zone] and FishingInfoPanelDB.allTime[zone][subzone] then
+				local allTimeData = FishingInfoPanelDB.allTime[zone][subzone]
+				local allTimeTotal = 0
+				for _, c in pairs(allTimeData) do
+					allTimeTotal = allTimeTotal + c
+				end
+
+				if allTimeTotal > 0 then
+					local allTimePct = ((allTimeData[itemID] or 0) / allTimeTotal) * 100
+					-- Only apply color if the item was caught this session
+					if count > 0 then
+						if currentPct > allTimePct + 0.5 then
+							color = {0, 1, 0} -- green - above average
+						elseif currentPct < allTimePct - 0.5 then
+							color = {1, 0, 0} -- red - below average
+						end
+					else
+						-- Items not caught this session show in gray
+						color = {0.5, 0.5, 0.5}
+					end
+				end
+			end
+
+			table.insert(fishData, {
+				itemID = itemID,
+				name = itemName or ("Item " .. itemID),
+				icon = itemIcon,
+				count = count,
+				percentage = currentPct,
+				color = color
+			})
+		end
+	end
+
+	-- Check if junk exists in all-time data when showing session
+	local allTimeJunkExists = false
+	if not useAllTime and allTimeData then
+		for itemID, _ in pairs(allTimeData) do
+			local _, _, itemQuality = GetItemInfo(itemID)
+			if itemQuality == 0 then
+				allTimeJunkExists = true
+				break
+			end
+		end
+	end
+
+	-- Add junk data if any junk was found (current or historical)
+	if junkData.count > 0 or allTimeJunkExists then
+		junkData.percentage = total > 0 and (junkData.count / total) * 100 or 0
+		
+		-- Compare junk percentage to all-time if showing session
+		if not useAllTime and FishingInfoPanelDB.allTime[zone] and FishingInfoPanelDB.allTime[zone][subzone] then
+			local allTimeData = FishingInfoPanelDB.allTime[zone][subzone]
+			local allTimeTotal = 0
+			local allTimeJunkCount = 0
+			
+			-- Calculate all-time totals and junk count
+			for itemID, count in pairs(allTimeData) do
+				allTimeTotal = allTimeTotal + count
+				local _, _, itemQuality = GetItemInfo(itemID)
+				if itemQuality == 0 then
+					allTimeJunkCount = allTimeJunkCount + count
+				end
+			end
+			
+			if allTimeTotal > 0 then
+				local allTimeJunkPct = (allTimeJunkCount / allTimeTotal) * 100
+				-- Only apply colors if junk was caught this session
+				if junkData.count > 0 then
+					if junkData.percentage < allTimeJunkPct - 0.5 then
+						junkData.color = {0, 1, 0} -- green - lower junk than usual
+					elseif junkData.percentage > allTimeJunkPct + 0.5 then
+						junkData.color = {1, 0, 0} -- red - higher junk than usual
+					else
+						junkData.color = {1, 1, 1} -- white - same as usual
+					end
+				else
+					-- No junk caught this session, show in gray
+					junkData.color = {0.5, 0.5, 0.5}
+				end
+			end
+		end
+		
+		table.insert(fishData, junkData)
+	end
+
+	-- Sort by count descending
+	table.sort(fishData, function(a, b) return a.count > b.count end)
+
+	return fishData
+end
+
+-- Calculate percentages and get fish data by skill
+local function GetFishDataBySkill(skillRange)
+	local data = FishingInfoPanelDB.bySkill[skillRange]
+	
+	if not data then
+		return {}
+	end
+	
+	local fishData = {}
+	local junkData = {
+		itemID = "JUNK",
+		name = "Junk",
+		icon = "Interface\\Icons\\INV_Misc_Bag_10",
+		count = 0,
+		percentage = 0,
+		color = {0.5, 0.5, 0.5}
+	}
+	local total = 0
+	
+	-- Calculate total
+	for itemID, count in pairs(data) do
+		total = total + count
+	end
+	
+	if total == 0 then return {} end
+	
+	-- Build fish data with percentages
+	for itemID, count in pairs(data) do
+		local itemName, _, itemQuality, _, _, _, _, _, _, itemIcon = GetItemInfo(itemID)
+		
+		-- Check if item is junk (gray quality = 0)
+		if itemQuality == 0 then
+			junkData.count = junkData.count + count
+		else
+			local currentPct = (count / total) * 100
+			
+			table.insert(fishData, {
+				itemID = itemID,
+				name = itemName or ("Item " .. itemID),
+				icon = itemIcon,
+				count = count,
+				percentage = currentPct,
+				color = {1, 1, 1}
+			})
+		end
+	end
+	
+	-- Add junk data if any junk was found
+	if junkData.count > 0 then
+		junkData.percentage = (junkData.count / total) * 100
+		table.insert(fishData, junkData)
+	end
+	
+	-- Sort by count descending
+	table.sort(fishData, function(a, b) return a.count > b.count end)
+	
+	return fishData
+end
+
+-- Update the display
+function FIP:UpdateDisplay()
+	local fishData
+	
+	if FIP.showingBySkill then
+		-- Show data by skill range
+		local totalSkill = GetFishingSkill()
+		local skillRange = GetSkillRange(totalSkill)
+		FIP.currentSkillRange = skillRange
+		
+		-- Update zone info for skill view
+		FishingInfoPanelFrameZoneInfoZoneName:SetText("Skill Range: " .. skillRange)
+		FishingInfoPanelFrameZoneInfoSubzoneName:SetText("Current Skill: " .. totalSkill)
+		
+		-- Update toggle button
+		FishingInfoPanelFrameToggleButton:SetText("Show by Zone")
+		
+		-- Get fish data by skill
+		fishData = GetFishDataBySkill(skillRange)
+	else
+		-- Show data by zone
+		local zone, subzone = GetCurrentLocation()
+		FIP.currentZone = zone
+		FIP.currentSubzone = subzone
+		
+		-- Update zone info
+		FishingInfoPanelFrameZoneInfoZoneName:SetText(zone)
+		FishingInfoPanelFrameZoneInfoSubzoneName:SetText(subzone)
+		
+		-- Update toggle button
+		local buttonText = FIP.showingAllTime and "Show Current Session" or "Show All Time"
+		FishingInfoPanelFrameToggleButton:SetText(buttonText)
+		
+		-- Get fish data by zone
+		fishData = GetFishData(zone, subzone, FIP.showingAllTime)
+	end
+
+	-- Clear existing rows
+	for _, row in ipairs(FIP.fishRows) do
+		row:Hide()
+	end
+
+	-- Create/update rows
+	local yOffset = 0
+	for i, fish in ipairs(fishData) do
+		local row = FIP.fishRows[i]
+
+		if not row then
+			row = CreateFrame("Frame", nil, FishingInfoPanelFrameScrollFrameScrollChild)
+			row:SetSize(320, 30)
+
+			-- Icon
+			row.icon = row:CreateTexture(nil, "ARTWORK")
+			row.icon:SetSize(24, 24)
+			row.icon:SetPoint("LEFT", 5, 0)
+
+			-- Name
+			row.name = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+			row.name:SetPoint("LEFT", row.icon, "RIGHT", 5, 0)
+			row.name:SetWidth(180)
+			row.name:SetJustifyH("LEFT")
+
+			-- Count
+			row.count = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+			row.count:SetPoint("RIGHT", row, "RIGHT", -60, 0)
+
+			-- Percentage
+			row.percentage = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+			row.percentage:SetPoint("RIGHT", row, "RIGHT", -5, 0)
+
+			FIP.fishRows[i] = row
+		end
+
+		row:SetPoint("TOPLEFT", 0, -yOffset)
+		row.icon:SetTexture(fish.icon)
+		row.name:SetText(fish.name)
+		row.count:SetText(fish.count)
+		row.percentage:SetText(string.format("%.1f%%", fish.percentage))
+		row.percentage:SetTextColor(unpack(fish.color))
+		row:Show()
+
+		yOffset = yOffset + 32
+	end
+
+	-- Update scroll child height
+	FishingInfoPanelFrameScrollFrameScrollChild:SetHeight(math.max(340, yOffset))
+end
+
+-- Toggle between session and all-time view
+function FIP:ToggleView()
+	if FIP.showingBySkill then
+		-- Switch back to zone view
+		FIP.showingBySkill = false
+	else
+		-- Toggle between session and all-time in zone view
+		FIP.showingAllTime = not FIP.showingAllTime
+	end
+	FIP:UpdateDisplay()
+end
+
+-- Toggle to skill-based view
+function FIP:ToggleSkillView()
+	FIP.showingBySkill = not FIP.showingBySkill
+	FIP:UpdateDisplay()
+end
+
+-- Toggle catch messages
+function FIP:ToggleCatchMessages()
+	FishingInfoPanelDB.config.showCatchMessages = not FishingInfoPanelDB.config.showCatchMessages
+	local status = FishingInfoPanelDB.config.showCatchMessages and "enabled" or "disabled"
+	print("|cff00ff00FishingInfoPanel:|r Catch messages " .. status)
+end
+
+-- Toggle debug logging
+function FIP:ToggleDebugLogging()
+	FishingInfoPanelDB.config.debugLogging = not FishingInfoPanelDB.config.debugLogging
+	local status = FishingInfoPanelDB.config.debugLogging and "enabled" or "disabled"
+	print("|cff00ff00FishingInfoPanel:|r Debug logging " .. status)
+end
+
+-- Show configuration
+function FIP:ShowConfig()
+	print("|cff00ff00FishingInfoPanel Configuration:|r")
+	print("  Catch messages: " .. (FishingInfoPanelDB.config.showCatchMessages and "enabled" or "disabled"))
+	print("  Debug logging: " .. (FishingInfoPanelDB.config.debugLogging and "enabled" or "disabled"))
+	print("Commands: /fip catch, /fip debug, /fip config")
+end
+
+-- Toggle frame visibility
+function FIP:ToggleFrame()
+	if FishingInfoPanelFrame:IsShown() then
+		FishingInfoPanelFrame:Hide()
+	else
+		FishingInfoPanelFrame:Show()
+		FIP:UpdateDisplay()
+	end
+end
+
+-- Calculate total items in cache
+local function GetCacheSize()
+	local totalItems = 0
+	if FishingInfoPanelDB and FishingInfoPanelDB.allTime then
+		for zone, subzones in pairs(FishingInfoPanelDB.allTime) do
+			for subzone, items in pairs(subzones) do
+				for itemID, count in pairs(items) do
+					totalItems = totalItems + count
+				end
+			end
+		end
+	end
+	return totalItems
+end
+
+-- Event handler
+local eventFrame = CreateFrame("Frame")
+eventFrame:RegisterEvent("ADDON_LOADED")
+eventFrame:RegisterEvent("LOOT_OPENED")
+eventFrame:RegisterEvent("ZONE_CHANGED")
+eventFrame:RegisterEvent("ZONE_CHANGED_INDOORS")
+eventFrame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+
+eventFrame:SetScript("OnEvent", function(self, event, ...)
+	if event == "ADDON_LOADED" then
+		local addonName = ...
+		if addonName == "FishingInfoPanel" then
+			InitDB()
+
+			-- Set up backdrop
+			FishingInfoPanelFrame:SetBackdrop({
+				bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
+				edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Gold-Border",
+				tile = false,
+				edgeSize = 32,
+				insets = { left = 11, right = 12, top = 12, bottom = 11 }
+			})
+			FishingInfoPanelFrame:SetBackdropColor(1, 1, 1, 1)
+
+			-- Register slash command
+			SLASH_FISHINGINFO1 = "/fishinfo"
+			SLASH_FISHINGINFO2 = "/fip"
+			SlashCmdList["FISHINGINFO"] = function(msg)
+				msg = msg:lower():trim()
+				if msg == "skill" then
+					FIP:ToggleSkillView()
+				elseif msg == "catch" then
+					FIP:ToggleCatchMessages()
+				elseif msg == "debug" then
+					FIP:ToggleDebugLogging()
+				elseif msg == "config" then
+					FIP:ShowConfig()
+				else
+					FIP:ToggleFrame()
+				end
+			end
+
+			local cacheSize = GetCacheSize()
+			print(string.format("|cff00ff00Fishing Info Panel loaded! Use /fip config for settings. Cache: %d catches|r", cacheSize))
+		end
+	elseif event == "LOOT_OPENED" then
+		-- Check if this is fishing loot using the WoW API
+		if IsFishingLoot() then
+			local numItems = GetNumLootItems()
+
+			for i = 1, numItems do
+				local itemLink = GetLootSlotLink(i)
+				if itemLink then
+					local itemID = tonumber(itemLink:match("item:(%d+)"))
+					if itemID then
+						FIP:RecordCatch(itemID)
+					end
+				end
+			end
+		end
+	elseif event:find("ZONE_CHANGED") then
+		if FishingInfoPanelFrame:IsShown() then
+			FIP:UpdateDisplay()
+		end
+	end
+end)
