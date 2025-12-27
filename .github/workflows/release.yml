@@ -1,0 +1,56 @@
+name: Release to CurseForge
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'v*.*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Clone project
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # needed for changelog generation
+    
+    # Package the addon using the WoW Packager action
+    # This action is specifically designed for WoW addons and handles:
+    # - TOC file processing
+    # - Version detection
+    # - Zip file creation
+    # - Multiple platform uploads
+    - name: Package and release
+      uses: BigWigsMods/packager@v2
+      with:
+        # The -p flag specifies the CurseForge project ID
+        # You'll need to replace PROJECT_ID with your actual CurseForge project ID
+        args: -p 1414279
+      env:
+        # CurseForge API token - must be added to repository secrets
+        CF_API_KEY: ${{ secrets.CF_API_KEY }}
+        # Optional: Also upload to GitHub releases
+        GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
+        
+    # Alternative: If you prefer to use the simpler curseforge-upload action
+    # Uncomment the section below and comment out the BigWigsMods/packager action above
+    
+    # - name: Create addon zip
+    #   run: |
+    #     zip -r FishingInfoPanel.zip *.lua *.xml *.toc *.md LICENSE -x ".*"
+    
+    # - name: Upload to CurseForge
+    #   uses: itsmeow/curseforge-upload@v3
+    #   with:
+    #     file_path: "FishingInfoPanel.zip"
+    #     game_endpoint: "wow"
+    #     game_versions: "11.0.7"  # Update with current WoW version
+    #     project_id: "1414279"  # CurseForge project ID for Fishing Info Panel
+    #     token: "${{ secrets.CF_API_KEY }}"
+    #     display_name: "Fishing Info Panel v${{ github.ref_name }}"
+    #     release_type: "release"  # or "beta" or "alpha"
+    #     changelog_type: "markdown"
+    #     changelog: |
+    #       See [full changelog](https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }})
