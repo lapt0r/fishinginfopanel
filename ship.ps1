@@ -62,7 +62,6 @@ function Update-PatchNotes {
 ## [$newVersion] - $today
 
 ### $changeType
-- Database versioning system implemented with migration support
 $(if ($description) { "- $description" })
 
 "@
@@ -72,6 +71,55 @@ $(if ($description) { "- $description" })
     
     Set-Content "PATCH_NOTES.md" $updatedContent -NoNewline
     Write-Host "[OK] Updated PATCH_NOTES.md with version $newVersion" -ForegroundColor Green
+}
+
+# Function to get current TOC version
+function Get-TocVersion {
+    $tocContent = Get-Content "FishingInfoPanel.toc" -Raw
+    if ($tocContent -match '## Version: (\d+\.\d+\.\d+)') {
+        return $matches[1]
+    }
+    Write-Error "Could not find version in FishingInfoPanel.toc"
+    exit 1
+}
+
+# Function to update TOC version
+function Update-TocVersion {
+    param([string]$newVersion)
+    
+    $content = Get-Content "FishingInfoPanel.toc" -Raw
+    $updatedContent = $content -replace '(## Version: )\d+\.\d+\.\d+', "`${1}$newVersion"
+    
+    Set-Content "FishingInfoPanel.toc" $updatedContent -NoNewline
+    Write-Host "[OK] Updated FishingInfoPanel.toc to version $newVersion" -ForegroundColor Green
+}
+
+# Function to validate version consistency
+function Test-VersionConsistency {
+    param([string]$expectedVersion)
+    
+    $tocVersion = Get-TocVersion
+    $patchNotesVersion = Get-CurrentVersion
+    
+    $inconsistencies = @()
+    
+    if ($tocVersion -ne $expectedVersion) {
+        $inconsistencies += "TOC version ($tocVersion) doesn't match expected ($expectedVersion)"
+    }
+    
+    if ($patchNotesVersion -ne $expectedVersion) {
+        $inconsistencies += "Patch notes version ($patchNotesVersion) doesn't match expected ($expectedVersion)"
+    }
+    
+    if ($inconsistencies.Count -gt 0) {
+        Write-Error "Version consistency check failed:"
+        foreach ($issue in $inconsistencies) {
+            Write-Error "  - $issue"
+        }
+        exit 1
+    }
+    
+    Write-Host "[OK] Version consistency validated" -ForegroundColor Green
 }
 
 # Main shipping process
@@ -96,14 +144,22 @@ try {
     $currentVersion = Get-CurrentVersion
     $nextVersion = Get-NextVersion $currentVersion $ReleaseType
     
+    # Pre-check: Ensure current versions are consistent
+    Write-Host "[CHECK] Validating current version consistency..." -ForegroundColor Cyan
+    Test-VersionConsistency $currentVersion
+    
     Write-Host "[VERSION] Bump: $currentVersion -> $nextVersion ($ReleaseType)" -ForegroundColor Yellow
     
-    # Update patch notes
+    # Update patch notes and TOC version
     Update-PatchNotes $nextVersion $Description
+    Update-TocVersion $nextVersion
     
-    # Stage patch notes
-    git add "PATCH_NOTES.md"
-    Write-Host "[OK] Staged PATCH_NOTES.md" -ForegroundColor Green
+    # Validate version consistency
+    Test-VersionConsistency $nextVersion
+    
+    # Stage updated files
+    git add "PATCH_NOTES.md" "FishingInfoPanel.toc"
+    Write-Host "[OK] Staged PATCH_NOTES.md and FishingInfoPanel.toc" -ForegroundColor Green
     
     # Create commit
     $commitMessage = "Version $nextVersion - $ReleaseType release`n`n"
