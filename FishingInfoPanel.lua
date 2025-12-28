@@ -90,7 +90,8 @@ local function GetFishingSkill()
 	return 0, 0, 0
 end
 
--- Get skill range for grouping (e.g., "0-50", "51-100", etc.)
+-- Get skill range for grouping (e.g., "1-50", "51-100", etc.)
+-- Modern WoW fishing caps at 300 skill
 local function GetSkillRange(skill)
 	if skill <= 50 then return "1-50"
 	elseif skill <= 100 then return "51-100"
@@ -98,10 +99,7 @@ local function GetSkillRange(skill)
 	elseif skill <= 200 then return "151-200"
 	elseif skill <= 250 then return "201-250"
 	elseif skill <= 300 then return "251-300"
-	elseif skill <= 350 then return "301-350"
-	elseif skill <= 400 then return "351-400"
-	elseif skill <= 450 then return "401-450"
-	else return "451+"
+	else return "300+"
 	end
 end
 
@@ -282,8 +280,16 @@ function FIP:RecordCatch(itemID)
 			local castDuration = GetTime() - FIP.fishingStartTime
 			castTimeText = string.format(" (%.1fs)", castDuration)
 		end
-		print(string.format("|cff00ff00FishingInfoPanel:|r Caught %s (%d)%s", 
-			itemName, totalSkill, castTimeText))
+		
+		local skillText
+		if modifier > 0 then
+			skillText = string.format("(%d+%d)", baseSkill, modifier)
+		else
+			skillText = string.format("(%d)", baseSkill)
+		end
+		
+		print(string.format("|cff00ff00FishingInfoPanel:|r Caught %s %s%s", 
+			itemName, skillText, castTimeText))
 	end
 	
 	-- Debug logging (if enabled)
@@ -555,8 +561,15 @@ function FIP:UpdateDisplay()
 		FIP.currentSkillRange = skillRange
 		
 		-- Update zone info for skill view
+		local baseSkill, modifier
+		totalSkill, baseSkill, modifier = GetFishingSkill()
+		
 		FishingInfoPanelFrameZoneInfoZoneName:SetText("Skill Range: " .. skillRange)
-		FishingInfoPanelFrameZoneInfoSubzoneName:SetText("Current Skill: " .. totalSkill)
+		if modifier > 0 then
+			FishingInfoPanelFrameZoneInfoSubzoneName:SetText(string.format("Fishing Skill: %d (+%d) = %d", baseSkill, modifier, totalSkill))
+		else
+			FishingInfoPanelFrameZoneInfoSubzoneName:SetText("Fishing Skill: " .. baseSkill)
+		end
 		
 		-- Update toggle button
 		FishingInfoPanelFrameToggleButton:SetText("Show by Zone")

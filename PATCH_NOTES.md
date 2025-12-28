@@ -1,5 +1,17 @@
 # Fishing Info Panel - Patch Notes
 
+## [1.1.3] - 2024-12-30
+
+### [FIX]
+- Fixed fishing skill display to properly show base skill vs modifiers
+- Updated skill ranges for modern WoW (300 skill cap instead of 450+)
+- Improved catch messages to distinguish base skill from lure/buff modifiers
+
+### [ENHANCEMENT]
+- Skill view now shows "Fishing Skill: 285 (+15) = 300" format when modifiers are active
+- Catch messages now show "(285+15)" format to clarify skill breakdown
+- Cleaner display when no fishing modifiers are active
+
 ## [1.1.2] - 2024-12-30
 
 ### [FIX]
