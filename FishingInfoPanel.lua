@@ -1,14 +1,64 @@
 FishingInfoPanel = {}
 local FIP = FishingInfoPanel
 
--- Initialize saved variables structure
+-- Database version constants
+local DB_VERSION = 2
+local DB_VERSION_KEY = "dbVersion"
+
+-- Database migration functions
+local function MigrateV1ToV2(db)
+	-- V1 databases have no version field and may be missing some fields
+	print("|cff00ff00FishingInfoPanel:|r Migrating database from v1 to v2...")
+	
+	-- Ensure all required fields exist
+	if not db.bySkill then
+		db.bySkill = {}
+	end
+	
+	if not db.config then
+		db.config = {
+			showCatchMessages = true,
+			debugLogging = false
+		}
+	end
+	
+	if not db.catchHistory then
+		db.catchHistory = {}
+	end
+	
+	if not db.castTimes then
+		db.castTimes = {}
+	end
+	
+	if not db.lastCatchTimes then
+		db.lastCatchTimes = {}
+	end
+	
+	-- Add version field
+	db[DB_VERSION_KEY] = 2
+	
+	print("|cff00ff00FishingInfoPanel:|r Database migration to v2 complete!")
+end
+
+-- Migration dispatch table
+local migrations = {
+	[1] = MigrateV1ToV2,
+	-- Future migrations can be added here:
+	-- [2] = MigrateV2ToV3,
+	-- [3] = MigrateV3ToV4,
+}
+
+-- Initialize saved variables structure with versioning
 local function InitDB()
+	-- Create new database if none exists
 	if not FishingInfoPanelDB then
+		print("|cff00ff00FishingInfoPanel:|r Creating new database (v" .. DB_VERSION .. ")...")
 		FishingInfoPanelDB = {
+			[DB_VERSION_KEY] = DB_VERSION,
 			allTime = {}, -- [zone][subzone][itemID] = count
 			currentSession = {},
 			sessionStart = time(),
-			-- New skill-based tracking
+			-- Skill-based tracking
 			bySkill = {}, -- [skillRange][itemID] = count
 			-- Configuration settings
 			config = {
@@ -22,40 +72,29 @@ local function InitDB()
 			-- Last catch times for time-to-catch calculation
 			lastCatchTimes = {} -- [itemID] = timestamp
 		}
+	else
+		-- Existing database - check version and migrate if needed
+		local currentVersion = FishingInfoPanelDB[DB_VERSION_KEY] or 1 -- Assume v1 if no version
+		
+		if currentVersion < DB_VERSION then
+			print("|cff00ff00FishingInfoPanel:|r Database version " .. currentVersion .. " detected, updating to v" .. DB_VERSION)
+			
+			-- Run migrations sequentially from current version to target
+			for version = currentVersion, DB_VERSION - 1 do
+				if migrations[version] then
+					migrations[version](FishingInfoPanelDB)
+				end
+			end
+		elseif currentVersion > DB_VERSION then
+			-- Database is newer than addon expects - warn but don't break
+			print("|cffffff00FishingInfoPanel Warning:|r Database version " .. currentVersion .. " is newer than addon supports (v" .. DB_VERSION .. "). Some features may not work correctly.")
+		end
 	end
 
-	-- Migrate old data if needed
-	if not FishingInfoPanelDB.bySkill then
-		FishingInfoPanelDB.bySkill = {}
-	end
-	
-	-- Add config if missing (for existing users)
-	if not FishingInfoPanelDB.config then
-		FishingInfoPanelDB.config = {
-			showCatchMessages = true,
-			debugLogging = false
-		}
-	end
-	
-	-- Add catch history if missing
-	if not FishingInfoPanelDB.catchHistory then
-		FishingInfoPanelDB.catchHistory = {}
-	end
-	
-	-- Add cast times if missing
-	if not FishingInfoPanelDB.castTimes then
-		FishingInfoPanelDB.castTimes = {}
-	end
-	
-	-- Add last catch times if missing
-	if not FishingInfoPanelDB.lastCatchTimes then
-		FishingInfoPanelDB.lastCatchTimes = {}
-	end
-
-	-- Reset current session on login
+	-- Reset session data on login (always done regardless of version)
 	FishingInfoPanelDB.currentSession = {}
 	FishingInfoPanelDB.sessionStart = time()
-	-- Clear catch history on new session
+	-- Clear ephemeral session data
 	FishingInfoPanelDB.catchHistory = {}
 	FishingInfoPanelDB.castTimes = {}
 	FishingInfoPanelDB.lastCatchTimes = {}
@@ -773,6 +812,7 @@ function FIP:ShowConfig()
 	print("|cff00ff00FishingInfoPanel Configuration:|r")
 	print("  Catch messages: " .. (FishingInfoPanelDB.config.showCatchMessages and "enabled" or "disabled"))
 	print("  Debug logging: " .. (FishingInfoPanelDB.config.debugLogging and "enabled" or "disabled"))
+	print("  Database version: " .. (FishingInfoPanelDB[DB_VERSION_KEY] or "unknown"))
 	print("Commands: /fip catch, /fip debug, /fip config")
 end
 
