@@ -2,6 +2,18 @@
 
 ## [Unreleased] -
 
+N/A
+
+## [1.1.0] = 2024-12-28
+
+### [FEATURE]
+- Added catch rate tracking with fish/hour projection based on 5-minute rolling window
+- Displays real-time catch rate at bottom of panel showing projected fish per hour
+- Added cast time tracking with mean and median statistics
+- Tracks time from fishing cast to loot window for performance analysis
+- Projected time-to-catch for session fish based on historical data (95% confidence range)
+- Actual time-to-catch for session fish (from last catch or beginning of session)
+
 ### [ENHANCEMENT]
 - Updated catch display to include previously caught fish with zero session counts
 - Items not caught in current session appear in gray with 0.0% to show historical completeness
