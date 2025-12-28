@@ -1,5 +1,17 @@
 # Fishing Info Panel - Patch Notes
 
+## [1.1.2] - 2024-12-30
+
+### [FIX]
+- Fixed PMF calculations not displaying values by adding appropriate placeholders
+- Shows "---" when insufficient cast data, "n/a" when no catch data, ">1h" for long durations
+- Fixed "Item XXXXX" display issue by showing "Loading..." with proper item info refresh
+- Added GET_ITEM_INFO_RECEIVED event handler to update display when item data becomes available
+
+### [ENHANCEMENT]
+- Added question mark icon placeholder for items still loading
+- Improved data readiness indicators throughout the UI
+
 ## [1.1.1] - 2024-12-30
 
 ### [FIX]

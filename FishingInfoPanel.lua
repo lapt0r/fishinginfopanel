@@ -418,8 +418,8 @@ local function GetFishData(zone, subzone, useAllTime)
 
 			table.insert(fishData, {
 				itemID = itemID,
-				name = itemName or ("Item " .. itemID),
-				icon = itemIcon,
+				name = itemName or ("Loading..."),
+				icon = itemIcon or "Interface\\Icons\\INV_Misc_QuestionMark",
 				count = count,
 				percentage = currentPct,
 				color = color
@@ -523,8 +523,8 @@ local function GetFishDataBySkill(skillRange)
 			
 			table.insert(fishData, {
 				itemID = itemID,
-				name = itemName or ("Item " .. itemID),
-				icon = itemIcon,
+				name = itemName or ("Loading..."),
+				icon = itemIcon or "Interface\\Icons\\INV_Misc_QuestionMark",
 				count = count,
 				percentage = currentPct,
 				color = {1, 1, 1}
@@ -649,8 +649,19 @@ function FIP:UpdateDisplay()
 				row.expectedTime:SetText(string.format("%.1fm", expectedTime / 60))
 			end
 			row.expectedTime:SetTextColor(0.7, 0.7, 1.0) -- Light blue
+		elseif expectedTime >= 3600 then -- More than 1 hour
+			row.expectedTime:SetText(">1h")
+			row.expectedTime:SetTextColor(0.5, 0.5, 0.7) -- Darker blue
 		else
-			row.expectedTime:SetText("")
+			-- No data or not ready
+			local castTimeCount = FishingInfoPanelDB.castTimes and #FishingInfoPanelDB.castTimes or 0
+			if castTimeCount < 3 then
+				row.expectedTime:SetText("---")
+				row.expectedTime:SetTextColor(0.5, 0.5, 0.5) -- Gray
+			else
+				row.expectedTime:SetText("n/a")
+				row.expectedTime:SetTextColor(0.5, 0.5, 0.5) -- Gray
+			end
 		end
 		
 		-- Display actual time to catch this fish
@@ -785,6 +796,7 @@ eventFrame:RegisterEvent("ZONE_CHANGED")
 eventFrame:RegisterEvent("ZONE_CHANGED_INDOORS")
 eventFrame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 eventFrame:RegisterEvent("UNIT_SPELLCAST_CHANNEL_START")
+eventFrame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
 
 eventFrame:SetScript("OnEvent", function(self, event, ...)
 	if event == "ADDON_LOADED" then
@@ -851,6 +863,11 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 			end
 		end
 	elseif event:find("ZONE_CHANGED") then
+		if FishingInfoPanelFrame:IsShown() then
+			FIP:UpdateDisplay()
+		end
+	elseif event == "GET_ITEM_INFO_RECEIVED" then
+		-- Update display when item info becomes available
 		if FishingInfoPanelFrame:IsShown() then
 			FIP:UpdateDisplay()
 		end
