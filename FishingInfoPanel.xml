@@ -75,27 +75,31 @@
 				</Anchors>
 				<Layers>
 					<Layer level="ARTWORK">
-						<FontString name="$parentFishHeader" inherits="GameFontHighlightSmall" text="Fish">
+						<FontString name="$parentFishHeader" inherits="GameFontHighlightSmall" text="Fish" justifyH="LEFT">
 							<Anchors>
-								<Anchor point="LEFT" x="30" y="0"/>
+								<Anchor point="LEFT" x="34" y="0"/>
 							</Anchors>
 						</FontString>
-						<FontString name="$parentCountHeader" inherits="GameFontHighlightSmall" text="Count">
+						<FontString name="$parentCountHeader" inherits="GameFontHighlightSmall" text="Count" justifyH="CENTER">
+							<Size x="40" y="20"/>
 							<Anchors>
 								<Anchor point="LEFT" x="200" y="0"/>
 							</Anchors>
 						</FontString>
-						<FontString name="$parentPercentHeader" inherits="GameFontHighlightSmall" text="%">
+						<FontString name="$parentPercentHeader" inherits="GameFontHighlightSmall" text="%" justifyH="CENTER">
+							<Size x="50" y="20"/>
 							<Anchors>
 								<Anchor point="LEFT" x="250" y="0"/>
 							</Anchors>
 						</FontString>
-						<FontString name="$parentTimeHeader" inherits="GameFontHighlightSmall" text="Next">
+						<FontString name="$parentTimeHeader" inherits="GameFontHighlightSmall" text="Next" justifyH="CENTER">
+							<Size x="50" y="20"/>
 							<Anchors>
 								<Anchor point="LEFT" x="305" y="0"/>
 							</Anchors>
 						</FontString>
-						<FontString name="$parentActualHeader" inherits="GameFontHighlightSmall" text="Actual">
+						<FontString name="$parentActualHeader" inherits="GameFontHighlightSmall" text="Actual" justifyH="RIGHT">
+							<Size x="50" y="20"/>
 							<Anchors>
 								<Anchor point="LEFT" x="365" y="0"/>
 							</Anchors>

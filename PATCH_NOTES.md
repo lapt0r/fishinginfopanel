@@ -1,8 +1,18 @@
 # Fishing Info Panel - Patch Notes
 
-## [Unreleased] -
+## [1.1.1] - 2024-12-30
 
-N/A
+### [FIX]
+- Added error handling for PMF (Probability Mass Function) calculations to prevent math errors
+- Protected against edge cases where probability equals 1 or 0 in time-to-catch calculations
+- Added debug logging for PMF computation errors when debug mode is enabled
+
+### [ENHANCEMENT]
+- Added visual indicators for cast time statistics readiness status
+- Shows "[Cast history warming up X/3]" in orange when collecting initial cast time data
+- Shows "[Cast history ready]" in green when sufficient data collected for PMF calculations (3+ casts)
+- Improved table column alignment for better readability
+- Center-aligned Count, Percentage, and Next columns for cleaner visual presentation
 
 ## [1.1.0] = 2024-12-28
 

@@ -213,7 +213,26 @@ local function GetExpectedTimeToFish(itemID, zone, subzone)
 	-- For 95% confidence, use geometric distribution quantile
 	-- P(X <= k) = 1 - (1-p)^k >= 0.95
 	-- k >= log(0.05) / log(1-p)
-	local expectedCasts = math.log(0.05) / math.log(1 - probability)
+	
+	-- Check for edge cases to prevent errors
+	if probability >= 1 or probability <= 0 then
+		if FishingInfoPanelDB.config.debugLogging then
+			print(string.format("|cff00ff00FishingInfoPanel Debug:|r Error computing PMF for item %s: invalid probability %.4f", itemID, probability))
+		end
+		return 0
+	end
+	
+	local success, expectedCasts = pcall(function()
+		return math.log(0.05) / math.log(1 - probability)
+	end)
+	
+	if not success or expectedCasts <= 0 or expectedCasts == math.huge then
+		if FishingInfoPanelDB.config.debugLogging then
+			print(string.format("|cff00ff00FishingInfoPanel Debug:|r Error computing PMF projected catch time for item %s", itemID))
+		end
+		return 0
+	end
+	
 	local expectedTime = expectedCasts * meanCastTime
 	
 	return expectedTime
@@ -574,7 +593,7 @@ function FIP:UpdateDisplay()
 
 		if not row then
 			row = CreateFrame("Frame", nil, FishingInfoPanelFrameScrollFrameScrollChild)
-			row:SetSize(370, 30)
+			row:SetSize(420, 30)
 
 			-- Icon
 			row.icon = row:CreateTexture(nil, "ARTWORK")
@@ -591,19 +610,19 @@ function FIP:UpdateDisplay()
 			row.count = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 			row.count:SetPoint("LEFT", row, "LEFT", 200, 0)
 			row.count:SetWidth(40)
-			row.count:SetJustifyH("RIGHT")
+			row.count:SetJustifyH("CENTER")
 
 			-- Percentage
 			row.percentage = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 			row.percentage:SetPoint("LEFT", row, "LEFT", 250, 0)
 			row.percentage:SetWidth(50)
-			row.percentage:SetJustifyH("RIGHT")
+			row.percentage:SetJustifyH("CENTER")
 			
 			-- Expected time
 			row.expectedTime = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 			row.expectedTime:SetPoint("LEFT", row, "LEFT", 305, 0)
 			row.expectedTime:SetWidth(50)
-			row.expectedTime:SetJustifyH("RIGHT")
+			row.expectedTime:SetJustifyH("CENTER")
 			
 			-- Actual time
 			row.actualTime = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -676,11 +695,18 @@ function FIP:UpdateDisplay()
 	local meanCast, medianCast = GetCastTimeStats()
 	
 	local statsText
-	if meanCast > 0 then
-		statsText = string.format("Fish/hr: %.1f | Cast: %.1fs/%.1fs", 
-			catchRate, meanCast, medianCast)
-	else
+	local castTimeCount = FishingInfoPanelDB.castTimes and #FishingInfoPanelDB.castTimes or 0
+	
+	if castTimeCount == 0 then
 		statsText = string.format("Fish/hr: %.1f | Cast times: No data yet", catchRate)
+	elseif castTimeCount < 3 then
+		-- Warming up - need at least 3 casts for PMF calculations
+		statsText = string.format("Fish/hr: %.1f | Cast: %.1fs/%.1fs |cffff9900 [Cast history warming up %d/3]|r", 
+			catchRate, meanCast, medianCast, castTimeCount)
+	else
+		-- Warmed up - ready for PMF calculations
+		statsText = string.format("Fish/hr: %.1f | Cast: %.1fs/%.1fs |cff00ff00 [Cast history ready]|r", 
+			catchRate, meanCast, medianCast)
 	end
 	
 	FishingInfoPanelFrameCatchRateFrameText:SetText(statsText)
