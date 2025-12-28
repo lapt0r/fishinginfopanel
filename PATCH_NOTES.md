@@ -1,5 +1,11 @@
 # Fishing Info Panel - Patch Notes
 
+
+## [1.2.0] - 2025-12-28
+
+### [FEATURE]
+- Database versioning system implemented with migration support
+- Automated release ship script for streamlined development workflow
 ## [1.1.3] - 2024-12-30
 
 ### [FIX]
