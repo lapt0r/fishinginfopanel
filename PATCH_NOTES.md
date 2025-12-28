@@ -1,6 +1,12 @@
 # Fishing Info Panel - Patch Notes
 
 
+
+## [1.2.1] - 2025-12-28
+
+### [FIX]
+- Database versioning system implemented with migration support
+- Fixed source repository sync - restored database versioning system that was live in game but missing from source
 ## [1.2.0] - 2025-12-28
 
 ### [FEATURE]
