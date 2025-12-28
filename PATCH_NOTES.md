@@ -2,6 +2,11 @@
 
 
 
+
+## [1.2.2] - 2025-12-28
+
+### [FIX]
+- Enhanced ship script with automatic TOC version updates and consistency validation
 ## [1.2.1] - 2025-12-28
 
 ### [FIX]
