@@ -47,3 +47,6 @@ CLAUDE.md
 # Development sync scripts (local testing only)
 sync-to-game.ps1
 verify-sync.ps1
+
+# Development TODO tracking
+TODO.md
