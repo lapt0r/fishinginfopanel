@@ -9,13 +9,13 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Clone project
       uses: actions/checkout@v4
       with:
         fetch-depth: 0  # needed for changelog generation
-    
+
     # Package the addon using the WoW Packager action
     # This action is specifically designed for WoW addons and handles:
     # - TOC file processing
@@ -33,14 +33,14 @@ jobs:
         CF_API_KEY: ${{ secrets.CF_API_KEY }}
         # Optional: Also upload to GitHub releases
         GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
-        
+
     # Alternative: If you prefer to use the simpler curseforge-upload action
     # Uncomment the section below and comment out the BigWigsMods/packager action above
-    
+
     # - name: Create addon zip
     #   run: |
     #     zip -r FishingInfoPanel.zip *.lua *.xml *.toc *.md LICENSE -x ".*"
-    
+
     # - name: Upload to CurseForge
     #   uses: itsmeow/curseforge-upload@v3
     #   with:

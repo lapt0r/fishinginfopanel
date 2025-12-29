@@ -9,34 +9,34 @@ local DB_VERSION_KEY = "dbVersion"
 local function MigrateV1ToV2(db)
 	-- V1 databases have no version field and may be missing some fields
 	print("|cff00ff00FishingInfoPanel:|r Migrating database from v1 to v2...")
-	
+
 	-- Ensure all required fields exist
 	if not db.bySkill then
 		db.bySkill = {}
 	end
-	
+
 	if not db.config then
 		db.config = {
 			showCatchMessages = true,
 			debugLogging = false
 		}
 	end
-	
+
 	if not db.catchHistory then
 		db.catchHistory = {}
 	end
-	
+
 	if not db.castTimes then
 		db.castTimes = {}
 	end
-	
+
 	if not db.lastCatchTimes then
 		db.lastCatchTimes = {}
 	end
-	
+
 	-- Add version field
 	db[DB_VERSION_KEY] = 2
-	
+
 	print("|cff00ff00FishingInfoPanel:|r Database migration to v2 complete!")
 end
 
@@ -75,10 +75,10 @@ local function InitDB()
 	else
 		-- Existing database - check version and migrate if needed
 		local currentVersion = FishingInfoPanelDB[DB_VERSION_KEY] or 1 -- Assume v1 if no version
-		
+
 		if currentVersion < DB_VERSION then
 			print("|cff00ff00FishingInfoPanel:|r Database version " .. currentVersion .. " detected, updating to v" .. DB_VERSION)
-			
+
 			-- Run migrations sequentially from current version to target
 			for version = currentVersion, DB_VERSION - 1 do
 				if migrations[version] then
@@ -147,18 +147,18 @@ local function GetCatchRate()
 	if not FishingInfoPanelDB.catchHistory then
 		return 0
 	end
-	
+
 	local currentTime = time()
 	local cutoffTime = currentTime - 300 -- 5 minutes
 	local recentCatches = 0
-	
+
 	-- Count catches in the last 5 minutes
 	for _, catch in ipairs(FishingInfoPanelDB.catchHistory) do
 		if catch.time > cutoffTime then
 			recentCatches = recentCatches + 1
 		end
 	end
-	
+
 	-- Calculate fish per hour based on 5-minute window
 	-- If we have catches, project based on actual time window
 	if recentCatches > 0 and #FishingInfoPanelDB.catchHistory > 0 then
@@ -168,14 +168,14 @@ local function GetCatchRate()
 				oldestRecentCatch = catch.time
 			end
 		end
-		
+
 		local timeWindow = currentTime - oldestRecentCatch
 		if timeWindow > 0 then
 			local catchesPerSecond = recentCatches / timeWindow
 			return catchesPerSecond * 3600 -- Convert to per hour
 		end
 	end
-	
+
 	return 0
 end
 
@@ -184,21 +184,21 @@ local function GetCastTimeStats()
 	if not FishingInfoPanelDB.castTimes or #FishingInfoPanelDB.castTimes == 0 then
 		return 0, 0
 	end
-	
+
 	-- Calculate mean
 	local sum = 0
 	for _, time in ipairs(FishingInfoPanelDB.castTimes) do
 		sum = sum + time
 	end
 	local mean = sum / #FishingInfoPanelDB.castTimes
-	
+
 	-- Calculate median
 	local sorted = {}
 	for _, time in ipairs(FishingInfoPanelDB.castTimes) do
 		table.insert(sorted, time)
 	end
 	table.sort(sorted)
-	
+
 	local median
 	local count = #sorted
 	if count % 2 == 0 then
@@ -206,7 +206,7 @@ local function GetCastTimeStats()
 	else
 		median = sorted[math.ceil(count / 2)]
 	end
-	
+
 	return mean, median
 end
 
@@ -215,13 +215,13 @@ local function GetExpectedTimeToFish(itemID, zone, subzone)
 	if not FishingInfoPanelDB.castTimes or #FishingInfoPanelDB.castTimes < 3 then
 		return 0 -- Need at least 3 casts for meaningful statistics
 	end
-	
+
 	-- Get all-time catch data for this zone
 	local zoneData = FishingInfoPanelDB.allTime[zone]
 	if not zoneData or not zoneData[subzone] then
 		return 0
 	end
-	
+
 	-- Calculate total catches and this fish's catch count
 	local totalCatches = 0
 	local fishCatches = 0
@@ -231,26 +231,26 @@ local function GetExpectedTimeToFish(itemID, zone, subzone)
 			fishCatches = count
 		end
 	end
-	
+
 	if totalCatches == 0 or fishCatches == 0 then
 		return 0
 	end
-	
+
 	-- Calculate probability of catching this fish per cast
 	local probability = fishCatches / totalCatches
-	
+
 	-- Calculate mean cast time
 	local sum = 0
 	for _, time in ipairs(FishingInfoPanelDB.castTimes) do
 		sum = sum + time
 	end
 	local meanCastTime = sum / #FishingInfoPanelDB.castTimes
-	
+
 	-- Expected time to catch this fish = mean cast time / probability
 	-- For 95% confidence, use geometric distribution quantile
 	-- P(X <= k) = 1 - (1-p)^k >= 0.95
 	-- k >= log(0.05) / log(1-p)
-	
+
 	-- Check for edge cases to prevent errors
 	if probability >= 1 or probability <= 0 then
 		if FishingInfoPanelDB.config.debugLogging then
@@ -258,20 +258,20 @@ local function GetExpectedTimeToFish(itemID, zone, subzone)
 		end
 		return 0
 	end
-	
+
 	local success, expectedCasts = pcall(function()
 		return math.log(0.05) / math.log(1 - probability)
 	end)
-	
+
 	if not success or expectedCasts <= 0 or expectedCasts == math.huge then
 		if FishingInfoPanelDB.config.debugLogging then
 			print(string.format("|cff00ff00FishingInfoPanel Debug:|r Error computing PMF projected catch time for item %s", itemID))
 		end
 		return 0
 	end
-	
+
 	local expectedTime = expectedCasts * meanCastTime
-	
+
 	return expectedTime
 end
 
@@ -300,7 +300,7 @@ function FIP:RecordCatch(itemID)
 		time = time(),
 		itemID = itemID
 	})
-	
+
 	-- Clean up old catches (keep only last 5 minutes)
 	local cutoffTime = time() - 300 -- 5 minutes in seconds
 	local newHistory = {}
@@ -319,22 +319,22 @@ function FIP:RecordCatch(itemID)
 			local castDuration = GetTime() - FIP.fishingStartTime
 			castTimeText = string.format(" (%.1fs)", castDuration)
 		end
-		
+
 		local skillText
 		if modifier > 0 then
 			skillText = string.format("(%d+%d)", baseSkill, modifier)
 		else
 			skillText = string.format("(%d)", baseSkill)
 		end
-		
-		print(string.format("|cff00ff00FishingInfoPanel:|r Caught %s %s%s", 
+
+		print(string.format("|cff00ff00FishingInfoPanel:|r Caught %s %s%s",
 			itemName, skillText, castTimeText))
 	end
-	
+
 	-- Debug logging (if enabled)
 	if FishingInfoPanelDB.config.debugLogging then
 		local itemName = GetItemInfo(itemID) or ("Item " .. itemID)
-		print(string.format("|cff00ff00FishingInfoPanel Debug:|r Caught %s (Total: %d [Base: %d + Modifier: %d]) in %s - %s (Range: %s)", 
+		print(string.format("|cff00ff00FishingInfoPanel Debug:|r Caught %s (Total: %d [Base: %d + Modifier: %d]) in %s - %s (Range: %s)",
 			itemName, totalSkill, baseSkill, modifier, zone, subzone, skillRange))
 	end
 
@@ -342,23 +342,23 @@ function FIP:RecordCatch(itemID)
 	if FIP.fishingStartTime then
 		local castDuration = GetTime() - FIP.fishingStartTime
 		table.insert(FishingInfoPanelDB.castTimes, castDuration)
-		
+
 		-- Keep only last 20 cast times
 		if #FishingInfoPanelDB.castTimes > 20 then
 			table.remove(FishingInfoPanelDB.castTimes, 1)
 		end
-		
+
 		FIP.fishingStartTime = nil
 	end
-	
+
 	-- Calculate time to catch this fish and store last catch time
 	local currentTime = time()
 	local previousCatchTime = FishingInfoPanelDB.lastCatchTimes[itemID] or FishingInfoPanelDB.sessionStart
 	local timeToCatch = currentTime - previousCatchTime
-	
+
 	-- Store this catch time for future calculations
 	FishingInfoPanelDB.lastCatchTimes[itemID] = currentTime
-	
+
 	-- Store the time to catch for display (we'll add this to the fish data structure)
 	FIP.lastTimeToCatch = FIP.lastTimeToCatch or {}
 	FIP.lastTimeToCatch[itemID] = timeToCatch
@@ -409,14 +409,14 @@ local function GetFishData(zone, subzone, useAllTime)
 
 	-- When showing session, include all items from all-time with 0 counts
 	local itemsToProcess = {}
-	
+
 	-- First, add all current data items
 	if data[zone] and data[zone][subzone] then
 		for itemID, count in pairs(data[zone][subzone]) do
 			itemsToProcess[itemID] = count
 		end
 	end
-	
+
 	-- If showing session, add any all-time items not in session with 0 count
 	if not useAllTime and allTimeData then
 		for itemID, _ in pairs(allTimeData) do
@@ -487,13 +487,13 @@ local function GetFishData(zone, subzone, useAllTime)
 	-- Add junk data if any junk was found (current or historical)
 	if junkData.count > 0 or allTimeJunkExists then
 		junkData.percentage = total > 0 and (junkData.count / total) * 100 or 0
-		
+
 		-- Compare junk percentage to all-time if showing session
 		if not useAllTime and FishingInfoPanelDB.allTime[zone] and FishingInfoPanelDB.allTime[zone][subzone] then
 			local allTimeData = FishingInfoPanelDB.allTime[zone][subzone]
 			local allTimeTotal = 0
 			local allTimeJunkCount = 0
-			
+
 			-- Calculate all-time totals and junk count
 			for itemID, count in pairs(allTimeData) do
 				allTimeTotal = allTimeTotal + count
@@ -502,7 +502,7 @@ local function GetFishData(zone, subzone, useAllTime)
 					allTimeJunkCount = allTimeJunkCount + count
 				end
 			end
-			
+
 			if allTimeTotal > 0 then
 				local allTimeJunkPct = (allTimeJunkCount / allTimeTotal) * 100
 				-- Only apply colors if junk was caught this session
@@ -520,7 +520,7 @@ local function GetFishData(zone, subzone, useAllTime)
 				end
 			end
 		end
-		
+
 		table.insert(fishData, junkData)
 	end
 
@@ -533,11 +533,11 @@ end
 -- Calculate percentages and get fish data by skill
 local function GetFishDataBySkill(skillRange)
 	local data = FishingInfoPanelDB.bySkill[skillRange]
-	
+
 	if not data then
 		return {}
 	end
-	
+
 	local fishData = {}
 	local junkData = {
 		itemID = "JUNK",
@@ -548,24 +548,24 @@ local function GetFishDataBySkill(skillRange)
 		color = {0.5, 0.5, 0.5}
 	}
 	local total = 0
-	
+
 	-- Calculate total
 	for itemID, count in pairs(data) do
 		total = total + count
 	end
-	
+
 	if total == 0 then return {} end
-	
+
 	-- Build fish data with percentages
 	for itemID, count in pairs(data) do
 		local itemName, _, itemQuality, _, _, _, _, _, _, itemIcon = GetItemInfo(itemID)
-		
+
 		-- Check if item is junk (gray quality = 0)
 		if itemQuality == 0 then
 			junkData.count = junkData.count + count
 		else
 			local currentPct = (count / total) * 100
-			
+
 			table.insert(fishData, {
 				itemID = itemID,
 				name = itemName or ("Loading..."),
@@ -576,43 +576,43 @@ local function GetFishDataBySkill(skillRange)
 			})
 		end
 	end
-	
+
 	-- Add junk data if any junk was found
 	if junkData.count > 0 then
 		junkData.percentage = (junkData.count / total) * 100
 		table.insert(fishData, junkData)
 	end
-	
+
 	-- Sort by count descending
 	table.sort(fishData, function(a, b) return a.count > b.count end)
-	
+
 	return fishData
 end
 
 -- Update the display
 function FIP:UpdateDisplay()
 	local fishData
-	
+
 	if FIP.showingBySkill then
 		-- Show data by skill range
 		local totalSkill = GetFishingSkill()
 		local skillRange = GetSkillRange(totalSkill)
 		FIP.currentSkillRange = skillRange
-		
+
 		-- Update zone info for skill view
 		local baseSkill, modifier
 		totalSkill, baseSkill, modifier = GetFishingSkill()
-		
+
 		FishingInfoPanelFrameZoneInfoZoneName:SetText("Skill Range: " .. skillRange)
 		if modifier > 0 then
 			FishingInfoPanelFrameZoneInfoSubzoneName:SetText(string.format("Fishing Skill: %d (+%d) = %d", baseSkill, modifier, totalSkill))
 		else
 			FishingInfoPanelFrameZoneInfoSubzoneName:SetText("Fishing Skill: " .. baseSkill)
 		end
-		
+
 		-- Update toggle button
 		FishingInfoPanelFrameToggleButton:SetText("Show by Zone")
-		
+
 		-- Get fish data by skill
 		fishData = GetFishDataBySkill(skillRange)
 	else
@@ -620,15 +620,15 @@ function FIP:UpdateDisplay()
 		local zone, subzone = GetCurrentLocation()
 		FIP.currentZone = zone
 		FIP.currentSubzone = subzone
-		
+
 		-- Update zone info
 		FishingInfoPanelFrameZoneInfoZoneName:SetText(zone)
 		FishingInfoPanelFrameZoneInfoSubzoneName:SetText(subzone)
-		
+
 		-- Update toggle button
 		local buttonText = FIP.showingAllTime and "Show Current Session" or "Show All Time"
 		FishingInfoPanelFrameToggleButton:SetText(buttonText)
-		
+
 		-- Get fish data by zone
 		fishData = GetFishData(zone, subzone, FIP.showingAllTime)
 	end
@@ -669,13 +669,13 @@ function FIP:UpdateDisplay()
 			row.percentage:SetPoint("LEFT", row, "LEFT", 250, 0)
 			row.percentage:SetWidth(50)
 			row.percentage:SetJustifyH("CENTER")
-			
+
 			-- Expected time
 			row.expectedTime = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 			row.expectedTime:SetPoint("LEFT", row, "LEFT", 305, 0)
 			row.expectedTime:SetWidth(50)
 			row.expectedTime:SetJustifyH("CENTER")
-			
+
 			-- Actual time
 			row.actualTime = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 			row.actualTime:SetPoint("LEFT", row, "LEFT", 365, 0)
@@ -691,7 +691,7 @@ function FIP:UpdateDisplay()
 		row.count:SetText(fish.count)
 		row.percentage:SetText(string.format("%.1f%%", fish.percentage))
 		row.percentage:SetTextColor(unpack(fish.color))
-		
+
 		-- Calculate and display expected time to catch this fish
 		local expectedTime = GetExpectedTimeToFish(fish.itemID, FIP.currentZone, FIP.currentSubzone)
 		if expectedTime > 0 and expectedTime < 3600 then -- Less than 1 hour
@@ -715,7 +715,7 @@ function FIP:UpdateDisplay()
 				row.expectedTime:SetTextColor(0.5, 0.5, 0.5) -- Gray
 			end
 		end
-		
+
 		-- Display actual time to catch this fish
 		local actualTime = FIP.lastTimeToCatch[fish.itemID]
 		if actualTime and actualTime > 0 then
@@ -728,7 +728,7 @@ function FIP:UpdateDisplay()
 				timeText = string.format("%.1fh", actualTime / 3600)
 			end
 			row.actualTime:SetText(timeText)
-			
+
 			-- Color code based on comparison with expected time
 			if expectedTime > 0 then
 				if actualTime < expectedTime then
@@ -744,7 +744,7 @@ function FIP:UpdateDisplay()
 		else
 			row.actualTime:SetText("")
 		end
-		
+
 		row:Show()
 
 		yOffset = yOffset + 32
@@ -752,26 +752,26 @@ function FIP:UpdateDisplay()
 
 	-- Update scroll child height
 	FishingInfoPanelFrameScrollFrameScrollChild:SetHeight(math.max(290, yOffset))
-	
+
 	-- Update catch rate and cast time display
 	local catchRate = GetCatchRate()
 	local meanCast, medianCast = GetCastTimeStats()
-	
+
 	local statsText
 	local castTimeCount = FishingInfoPanelDB.castTimes and #FishingInfoPanelDB.castTimes or 0
-	
+
 	if castTimeCount == 0 then
 		statsText = string.format("Fish/hr: %.1f | Cast times: No data yet", catchRate)
 	elseif castTimeCount < 3 then
 		-- Warming up - need at least 3 casts for PMF calculations
-		statsText = string.format("Fish/hr: %.1f | Cast: %.1fs/%.1fs |cffff9900 [Cast history warming up %d/3]|r", 
+		statsText = string.format("Fish/hr: %.1f | Cast: %.1fs/%.1fs |cffff9900 [Cast history warming up %d/3]|r",
 			catchRate, meanCast, medianCast, castTimeCount)
 	else
 		-- Warmed up - ready for PMF calculations
-		statsText = string.format("Fish/hr: %.1f | Cast: %.1fs/%.1fs |cff00ff00 [Cast history ready]|r", 
+		statsText = string.format("Fish/hr: %.1f | Cast: %.1fs/%.1fs |cff00ff00 [Cast history ready]|r",
 			catchRate, meanCast, medianCast)
 	end
-	
+
 	FishingInfoPanelFrameCatchRateFrameText:SetText(statsText)
 end
 
@@ -902,7 +902,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 	elseif event == "LOOT_OPENED" then
 		-- Check if this is fishing loot using the WoW API
 		if IsFishingLoot() then
-			
+
 			local numItems = GetNumLootItems()
 
 			for i = 1, numItems do

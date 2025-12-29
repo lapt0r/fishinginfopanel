@@ -1,0 +1,28 @@
+# Pre-commit configuration for FishingInfoPanel
+# See https://pre-commit.com for more information
+repos:
+  # Basic file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.md$'
+      - id: end-of-file-fixer
+        exclude: '\.md$'
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: mixed-line-ending
+        args: ['--fix=crlf']
+
+  # Custom Lua syntax check using local lua
+  - repo: local
+    hooks:
+      - id: lua-syntax-check
+        name: Lua syntax check
+        entry: luac -p
+        language: system
+        files: '\.lua$'
+        pass_filenames: true

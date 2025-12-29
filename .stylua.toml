@@ -1,0 +1,12 @@
+# StyLua configuration for World of Warcraft addon development
+# See https://github.com/JohnnyMorganz/StyLua for more information
+
+column_width = 120
+line_endings = "Windows"
+indent_type = "Tabs"
+indent_width = 1
+quote_style = "AutoPreferDouble"
+call_parentheses = "Always"
+
+[sort_requires]
+enabled = false

@@ -1,7 +1,11 @@
 # Fishing Info Panel - Patch Notes
 
+## [Unreleased] - Release Candidate
 
-
+### [CHORE]
+- Added pre-commit configuration with StyLua, Semgrep, and gitleaks for code quality
+- Created GitHub Actions workflow for automated linting and security checks
+- Configured Lua formatting rules optimized for WoW addon development
 
 ## [1.2.2] - 2025-12-28
 

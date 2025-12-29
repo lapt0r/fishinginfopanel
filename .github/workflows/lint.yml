@@ -1,0 +1,87 @@
+# GitHub Actions workflow for linting and security checks
+# Matches the pre-commit configuration for consistency
+name: Lint and Security Checks
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    name: Lint and Security Checks
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    # Basic file checks
+    - name: Check for trailing whitespace
+      run: |
+        if grep -r --include="*.lua" --include="*.toc" --include="*.xml" --include="*.yml" --include="*.yaml" --include="*.ps1" '[[:space:]]$' .; then
+          echo "Found trailing whitespace"
+          exit 1
+        fi
+
+    - name: Check for large files
+      run: |
+        find . -type f -size +1000k -not -path './.git/*' | while read file; do
+          echo "Large file found: $file"
+          exit 1
+        done
+
+    - name: Check for merge conflict markers
+      run: |
+        if grep -r --include="*.lua" --include="*.toc" --include="*.xml" --include="*.yml" --include="*.yaml" --include="*.ps1" -E '^(<<<<<<<|=======|>>>>>>>)' .; then
+          echo "Found merge conflict markers"
+          exit 1
+        fi
+
+    # Lua linting with StyLua
+    - name: Install StyLua
+      run: |
+        wget https://github.com/JohnnyMorganz/StyLua/releases/download/v0.20.0/stylua-linux-x86_64.zip
+        unzip stylua-linux-x86_64.zip
+        chmod +x stylua
+        sudo mv stylua /usr/local/bin/
+
+    - name: Run StyLua
+      run: stylua --config-path=.stylua.toml --check .
+
+    # Lua syntax check
+    - name: Install Lua
+      run: sudo apt-get update && sudo apt-get install -y lua5.4
+
+    - name: Lua syntax check
+      run: |
+        find . -name "*.lua" -exec lua -e "assert(loadfile('{}'))" \;
+
+    # Semgrep security and code quality
+    - name: Run Semgrep
+      uses: semgrep/semgrep-action@v1
+      with:
+        config: >-
+          p/security-audit
+          p/lua
+          p/secrets
+        generateSarif: "1"
+      env:
+        SEMGREP_RULES: p/security-audit,p/lua,p/secrets
+
+    # Secret scanning with gitleaks
+    - name: Run gitleaks
+      uses: gitleaks/gitleaks-action@v2
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }} # Only required for Organizations, not personal accounts.
+
+    # Upload SARIF file for GitHub Security tab
+    - name: Upload SARIF file
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: semgrep.sarif
+      if: always()
