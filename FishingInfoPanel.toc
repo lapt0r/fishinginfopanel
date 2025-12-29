@@ -2,7 +2,7 @@
 ## Title: Fishing Info Panel
 ## Notes: Tracks fishing catches by zone with session vs all-time comparison. Groups junk items and shows color-coded percentages.
 ## Author: Manae
-## Version: 1.2.2
+## Version: 1.2.3
 ## SavedVariables: FishingInfoPanelDB
 ## IconTexture: 132931
 ## X-Category: Professions

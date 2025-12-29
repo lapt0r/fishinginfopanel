@@ -872,7 +872,7 @@ end
 
 -- Show welcome message with all commands
 function FIP:ShowWelcomeMessage()
-	print("|cff00ff00=== Fishing Info Panel v1.2.2 ===|r")
+	print("|cff00ff00=== Fishing Info Panel v1.2.3 ===|r")
 	print("|cffff9900Available Commands:|r")
 	print("  |cff00ff00/fip|r - Toggle panel visibility")
 	print("  |cff00ff00/fip skill|r - Toggle skill-based view")
