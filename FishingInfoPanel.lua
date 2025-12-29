@@ -18,7 +18,7 @@ local function MigrateV1ToV2(db)
 	if not db.config then
 		db.config = {
 			showCatchMessages = true,
-			debugLogging = false
+			debugLogging = false,
 		}
 	end
 
@@ -63,21 +63,23 @@ local function InitDB()
 			-- Configuration settings
 			config = {
 				showCatchMessages = true,
-				debugLogging = false
+				debugLogging = false,
 			},
 			-- Catch rate tracking
 			catchHistory = {}, -- Array of {time = timestamp, itemID = id}
 			-- Cast time tracking
 			castTimes = {}, -- Array of cast durations in seconds
 			-- Last catch times for time-to-catch calculation
-			lastCatchTimes = {} -- [itemID] = timestamp
+			lastCatchTimes = {}, -- [itemID] = timestamp
 		}
 	else
 		-- Existing database - check version and migrate if needed
 		local currentVersion = FishingInfoPanelDB[DB_VERSION_KEY] or 1 -- Assume v1 if no version
 
 		if currentVersion < DB_VERSION then
-			print("|cff00ff00FishingInfoPanel:|r Database version " .. currentVersion .. " detected, updating to v" .. DB_VERSION)
+			print(
+				"|cff00ff00FishingInfoPanel:|r Database version " .. currentVersion .. " detected, updating to v" .. DB_VERSION
+			)
 
 			-- Run migrations sequentially from current version to target
 			for version = currentVersion, DB_VERSION - 1 do
@@ -87,7 +89,13 @@ local function InitDB()
 			end
 		elseif currentVersion > DB_VERSION then
 			-- Database is newer than addon expects - warn but don't break
-			print("|cffffff00FishingInfoPanel Warning:|r Database version " .. currentVersion .. " is newer than addon supports (v" .. DB_VERSION .. "). Some features may not work correctly.")
+			print(
+				"|cffffff00FishingInfoPanel Warning:|r Database version "
+					.. currentVersion
+					.. " is newer than addon supports (v"
+					.. DB_VERSION
+					.. "). Some features may not work correctly."
+			)
 		end
 	end
 
@@ -121,7 +129,8 @@ end
 local function GetFishingSkill()
 	local prof1, prof2, archaeology, fishing, cooking = GetProfessions()
 	if fishing then
-		local name, icon, skillLevel, maxSkillLevel, numAbilities, spelloffset, skillLine, skillModifier = GetProfessionInfo(fishing)
+		local name, icon, skillLevel, maxSkillLevel, numAbilities, spelloffset, skillLine, skillModifier =
+			GetProfessionInfo(fishing)
 		-- Total skill includes base skill + modifiers (lures, etc)
 		local totalSkill = (skillLevel or 0) + (skillModifier or 0)
 		return totalSkill, skillLevel, skillModifier
@@ -132,13 +141,20 @@ end
 -- Get skill range for grouping (e.g., "1-50", "51-100", etc.)
 -- Modern WoW fishing caps at 300 skill
 local function GetSkillRange(skill)
-	if skill <= 50 then return "1-50"
-	elseif skill <= 100 then return "51-100"
-	elseif skill <= 150 then return "101-150"
-	elseif skill <= 200 then return "151-200"
-	elseif skill <= 250 then return "201-250"
-	elseif skill <= 300 then return "251-300"
-	else return "300+"
+	if skill <= 50 then
+		return "1-50"
+	elseif skill <= 100 then
+		return "51-100"
+	elseif skill <= 150 then
+		return "101-150"
+	elseif skill <= 200 then
+		return "151-200"
+	elseif skill <= 250 then
+		return "201-250"
+	elseif skill <= 300 then
+		return "251-300"
+	else
+		return "300+"
 	end
 end
 
@@ -254,7 +270,13 @@ local function GetExpectedTimeToFish(itemID, zone, subzone)
 	-- Check for edge cases to prevent errors
 	if probability >= 1 or probability <= 0 then
 		if FishingInfoPanelDB.config.debugLogging then
-			print(string.format("|cff00ff00FishingInfoPanel Debug:|r Error computing PMF for item %s: invalid probability %.4f", itemID, probability))
+			print(
+				string.format(
+					"|cff00ff00FishingInfoPanel Debug:|r Error computing PMF for item %s: invalid probability %.4f",
+					itemID,
+					probability
+				)
+			)
 		end
 		return 0
 	end
@@ -265,7 +287,9 @@ local function GetExpectedTimeToFish(itemID, zone, subzone)
 
 	if not success or expectedCasts <= 0 or expectedCasts == math.huge then
 		if FishingInfoPanelDB.config.debugLogging then
-			print(string.format("|cff00ff00FishingInfoPanel Debug:|r Error computing PMF projected catch time for item %s", itemID))
+			print(
+				string.format("|cff00ff00FishingInfoPanel Debug:|r Error computing PMF projected catch time for item %s", itemID)
+			)
 		end
 		return 0
 	end
@@ -292,13 +316,15 @@ function FIP:RecordCatch(itemID)
 
 	-- Increment counts
 	FishingInfoPanelDB.allTime[zone][subzone][itemID] = (FishingInfoPanelDB.allTime[zone][subzone][itemID] or 0) + 1
-	FishingInfoPanelDB.currentSession[zone][subzone][itemID] = (FishingInfoPanelDB.currentSession[zone][subzone][itemID] or 0) + 1
+	FishingInfoPanelDB.currentSession[zone][subzone][itemID] = (
+		FishingInfoPanelDB.currentSession[zone][subzone][itemID] or 0
+	) + 1
 	FishingInfoPanelDB.bySkill[skillRange][itemID] = (FishingInfoPanelDB.bySkill[skillRange][itemID] or 0) + 1
 
 	-- Record catch time for catch rate tracking
 	table.insert(FishingInfoPanelDB.catchHistory, {
 		time = time(),
-		itemID = itemID
+		itemID = itemID,
 	})
 
 	-- Clean up old catches (keep only last 5 minutes)
@@ -327,15 +353,24 @@ function FIP:RecordCatch(itemID)
 			skillText = string.format("(%d)", baseSkill)
 		end
 
-		print(string.format("|cff00ff00FishingInfoPanel:|r Caught %s %s%s",
-			itemName, skillText, castTimeText))
+		print(string.format("|cff00ff00FishingInfoPanel:|r Caught %s %s%s", itemName, skillText, castTimeText))
 	end
 
 	-- Debug logging (if enabled)
 	if FishingInfoPanelDB.config.debugLogging then
 		local itemName = GetItemInfo(itemID) or ("Item " .. itemID)
-		print(string.format("|cff00ff00FishingInfoPanel Debug:|r Caught %s (Total: %d [Base: %d + Modifier: %d]) in %s - %s (Range: %s)",
-			itemName, totalSkill, baseSkill, modifier, zone, subzone, skillRange))
+		print(
+			string.format(
+				"|cff00ff00FishingInfoPanel Debug:|r Caught %s (Total: %d [Base: %d + Modifier: %d]) in %s - %s (Range: %s)",
+				itemName,
+				totalSkill,
+				baseSkill,
+				modifier,
+				zone,
+				subzone,
+				skillRange
+			)
+		)
 	end
 
 	-- Record cast time if we have a start time
@@ -393,10 +428,10 @@ local function GetFishData(zone, subzone, useAllTime)
 	local junkData = {
 		itemID = "JUNK",
 		name = "Junk",
-		icon = "Interface\\Icons\\INV_Misc_Bag_10",  -- Generic bag icon for junk
+		icon = "Interface\\Icons\\INV_Misc_Bag_10", -- Generic bag icon for junk
 		count = 0,
 		percentage = 0,
-		color = {0.5, 0.5, 0.5}  -- Gray color for junk
+		color = { 0.5, 0.5, 0.5 }, -- Gray color for junk
 	}
 	local total = 0
 
@@ -435,7 +470,7 @@ local function GetFishData(zone, subzone, useAllTime)
 			junkData.count = junkData.count + count
 		else
 			local currentPct = total > 0 and (count / total) * 100 or 0
-			local color = {1, 1, 1} -- white default
+			local color = { 1, 1, 1 } -- white default
 
 			-- Compare to all-time if showing session
 			if not useAllTime and FishingInfoPanelDB.allTime[zone] and FishingInfoPanelDB.allTime[zone][subzone] then
@@ -450,24 +485,24 @@ local function GetFishData(zone, subzone, useAllTime)
 					-- Only apply color if the item was caught this session
 					if count > 0 then
 						if currentPct > allTimePct + 0.5 then
-							color = {0, 1, 0} -- green - above average
+							color = { 0, 1, 0 } -- green - above average
 						elseif currentPct < allTimePct - 0.5 then
-							color = {1, 0, 0} -- red - below average
+							color = { 1, 0, 0 } -- red - below average
 						end
 					else
 						-- Items not caught this session show in gray
-						color = {0.5, 0.5, 0.5}
+						color = { 0.5, 0.5, 0.5 }
 					end
 				end
 			end
 
 			table.insert(fishData, {
 				itemID = itemID,
-				name = itemName or ("Loading..."),
+				name = itemName or "Loading...",
 				icon = itemIcon or "Interface\\Icons\\INV_Misc_QuestionMark",
 				count = count,
 				percentage = currentPct,
-				color = color
+				color = color,
 			})
 		end
 	end
@@ -508,15 +543,15 @@ local function GetFishData(zone, subzone, useAllTime)
 				-- Only apply colors if junk was caught this session
 				if junkData.count > 0 then
 					if junkData.percentage < allTimeJunkPct - 0.5 then
-						junkData.color = {0, 1, 0} -- green - lower junk than usual
+						junkData.color = { 0, 1, 0 } -- green - lower junk than usual
 					elseif junkData.percentage > allTimeJunkPct + 0.5 then
-						junkData.color = {1, 0, 0} -- red - higher junk than usual
+						junkData.color = { 1, 0, 0 } -- red - higher junk than usual
 					else
-						junkData.color = {1, 1, 1} -- white - same as usual
+						junkData.color = { 1, 1, 1 } -- white - same as usual
 					end
 				else
 					-- No junk caught this session, show in gray
-					junkData.color = {0.5, 0.5, 0.5}
+					junkData.color = { 0.5, 0.5, 0.5 }
 				end
 			end
 		end
@@ -525,7 +560,9 @@ local function GetFishData(zone, subzone, useAllTime)
 	end
 
 	-- Sort by count descending
-	table.sort(fishData, function(a, b) return a.count > b.count end)
+	table.sort(fishData, function(a, b)
+		return a.count > b.count
+	end)
 
 	return fishData
 end
@@ -545,7 +582,7 @@ local function GetFishDataBySkill(skillRange)
 		icon = "Interface\\Icons\\INV_Misc_Bag_10",
 		count = 0,
 		percentage = 0,
-		color = {0.5, 0.5, 0.5}
+		color = { 0.5, 0.5, 0.5 },
 	}
 	local total = 0
 
@@ -554,7 +591,9 @@ local function GetFishDataBySkill(skillRange)
 		total = total + count
 	end
 
-	if total == 0 then return {} end
+	if total == 0 then
+		return {}
+	end
 
 	-- Build fish data with percentages
 	for itemID, count in pairs(data) do
@@ -568,11 +607,11 @@ local function GetFishDataBySkill(skillRange)
 
 			table.insert(fishData, {
 				itemID = itemID,
-				name = itemName or ("Loading..."),
+				name = itemName or "Loading...",
 				icon = itemIcon or "Interface\\Icons\\INV_Misc_QuestionMark",
 				count = count,
 				percentage = currentPct,
-				color = {1, 1, 1}
+				color = { 1, 1, 1 },
 			})
 		end
 	end
@@ -584,7 +623,9 @@ local function GetFishDataBySkill(skillRange)
 	end
 
 	-- Sort by count descending
-	table.sort(fishData, function(a, b) return a.count > b.count end)
+	table.sort(fishData, function(a, b)
+		return a.count > b.count
+	end)
 
 	return fishData
 end
@@ -605,7 +646,9 @@ function FIP:UpdateDisplay()
 
 		FishingInfoPanelFrameZoneInfoZoneName:SetText("Skill Range: " .. skillRange)
 		if modifier > 0 then
-			FishingInfoPanelFrameZoneInfoSubzoneName:SetText(string.format("Fishing Skill: %d (+%d) = %d", baseSkill, modifier, totalSkill))
+			FishingInfoPanelFrameZoneInfoSubzoneName:SetText(
+				string.format("Fishing Skill: %d (+%d) = %d", baseSkill, modifier, totalSkill)
+			)
 		else
 			FishingInfoPanelFrameZoneInfoSubzoneName:SetText("Fishing Skill: " .. baseSkill)
 		end
@@ -764,12 +807,17 @@ function FIP:UpdateDisplay()
 		statsText = string.format("Fish/hr: %.1f | Cast times: No data yet", catchRate)
 	elseif castTimeCount < 3 then
 		-- Warming up - need at least 3 casts for PMF calculations
-		statsText = string.format("Fish/hr: %.1f | Cast: %.1fs/%.1fs |cffff9900 [Cast history warming up %d/3]|r",
-			catchRate, meanCast, medianCast, castTimeCount)
+		statsText = string.format(
+			"Fish/hr: %.1f | Cast: %.1fs/%.1fs |cffff9900 [Cast history warming up %d/3]|r",
+			catchRate,
+			meanCast,
+			medianCast,
+			castTimeCount
+		)
 	else
 		-- Warmed up - ready for PMF calculations
-		statsText = string.format("Fish/hr: %.1f | Cast: %.1fs/%.1fs |cff00ff00 [Cast history ready]|r",
-			catchRate, meanCast, medianCast)
+		statsText =
+			string.format("Fish/hr: %.1f | Cast: %.1fs/%.1fs |cff00ff00 [Cast history ready]|r", catchRate, meanCast, medianCast)
 	end
 
 	FishingInfoPanelFrameCatchRateFrameText:SetText(statsText)
@@ -863,7 +911,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 				edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Gold-Border",
 				tile = false,
 				edgeSize = 32,
-				insets = { left = 11, right = 12, top = 12, bottom = 11 }
+				insets = { left = 11, right = 12, top = 12, bottom = 11 },
 			})
 			FishingInfoPanelFrame:SetBackdropColor(1, 1, 1, 1)
 
@@ -886,7 +934,9 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 			end
 
 			local cacheSize = GetCacheSize()
-			print(string.format("|cff00ff00Fishing Info Panel loaded! Use /fip config for settings. Cache: %d catches|r", cacheSize))
+			print(
+				string.format("|cff00ff00Fishing Info Panel loaded! Use /fip config for settings. Cache: %d catches|r", cacheSize)
+			)
 		end
 	elseif event == "UNIT_SPELLCAST_CHANNEL_START" then
 		local unit, castGUID, spellID = ...
@@ -902,7 +952,6 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 	elseif event == "LOOT_OPENED" then
 		-- Check if this is fishing loot using the WoW API
 		if IsFishingLoot() then
-
 			local numItems = GetNumLootItems()
 
 			for i = 1, numItems do
