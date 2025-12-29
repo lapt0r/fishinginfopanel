@@ -19,6 +19,7 @@ local function MigrateV1ToV2(db)
 		db.config = {
 			showCatchMessages = true,
 			debugLogging = false,
+			autoOpen = true,
 		}
 	end
 
@@ -32,6 +33,11 @@ local function MigrateV1ToV2(db)
 
 	if not db.lastCatchTimes then
 		db.lastCatchTimes = {}
+	end
+
+	-- Ensure autoOpen config exists
+	if db.config and db.config.autoOpen == nil then
+		db.config.autoOpen = true
 	end
 
 	-- Add version field
@@ -64,6 +70,7 @@ local function InitDB()
 			config = {
 				showCatchMessages = true,
 				debugLogging = false,
+				autoOpen = true,
 			},
 			-- Catch rate tracking
 			catchHistory = {}, -- Array of {time = timestamp, itemID = id}
@@ -117,6 +124,7 @@ FIP.currentSkillRange = ""
 FIP.fishRows = {}
 FIP.fishingStartTime = nil
 FIP.lastTimeToCatch = {}
+FIP.autoOpened = false
 
 -- Get current location
 local function GetCurrentLocation()
@@ -855,19 +863,42 @@ function FIP:ToggleDebugLogging()
 	print("|cff00ff00FishingInfoPanel:|r Debug logging " .. status)
 end
 
+-- Toggle auto open/close
+function FIP:ToggleAutoOpen()
+	FishingInfoPanelDB.config.autoOpen = not FishingInfoPanelDB.config.autoOpen
+	local status = FishingInfoPanelDB.config.autoOpen and "enabled" or "disabled"
+	print("|cff00ff00FishingInfoPanel:|r Auto open/close " .. status)
+end
+
+-- Show welcome message with all commands
+function FIP:ShowWelcomeMessage()
+	print("|cff00ff00=== Fishing Info Panel v1.2.2 ===|r")
+	print("|cffff9900Available Commands:|r")
+	print("  |cff00ff00/fip|r - Toggle panel visibility")
+	print("  |cff00ff00/fip skill|r - Toggle skill-based view")
+	print("  |cff00ff00/fip catch|r - Toggle catch messages")
+	print("  |cff00ff00/fip debug|r - Toggle debug logging")
+	print("  |cff00ff00/fip auto|r - Toggle auto open/close on fishing")
+	print("  |cff00ff00/fip config|r - Show current settings")
+	print("  |cff00ff00/fip help|r - Show this help message")
+	print("|cffff9900Happy fishing!|r")
+end
+
 -- Show configuration
 function FIP:ShowConfig()
 	print("|cff00ff00FishingInfoPanel Configuration:|r")
 	print("  Catch messages: " .. (FishingInfoPanelDB.config.showCatchMessages and "enabled" or "disabled"))
 	print("  Debug logging: " .. (FishingInfoPanelDB.config.debugLogging and "enabled" or "disabled"))
+	print("  Auto open/close: " .. (FishingInfoPanelDB.config.autoOpen and "enabled" or "disabled"))
 	print("  Database version: " .. (FishingInfoPanelDB[DB_VERSION_KEY] or "unknown"))
-	print("Commands: /fip catch, /fip debug, /fip config")
 end
 
 -- Toggle frame visibility
 function FIP:ToggleFrame()
 	if FishingInfoPanelFrame:IsShown() then
 		FishingInfoPanelFrame:Hide()
+		-- Reset auto-opened flag when manually closed
+		FIP.autoOpened = false
 	else
 		FishingInfoPanelFrame:Show()
 		FIP:UpdateDisplay()
@@ -897,6 +928,7 @@ eventFrame:RegisterEvent("ZONE_CHANGED")
 eventFrame:RegisterEvent("ZONE_CHANGED_INDOORS")
 eventFrame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 eventFrame:RegisterEvent("UNIT_SPELLCAST_CHANNEL_START")
+eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
 eventFrame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
 
 eventFrame:SetScript("OnEvent", function(self, event, ...)
@@ -926,17 +958,20 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 					FIP:ToggleCatchMessages()
 				elseif msg == "debug" then
 					FIP:ToggleDebugLogging()
+				elseif msg == "auto" then
+					FIP:ToggleAutoOpen()
 				elseif msg == "config" then
 					FIP:ShowConfig()
+				elseif msg == "help" then
+					FIP:ShowWelcomeMessage()
 				else
 					FIP:ToggleFrame()
 				end
 			end
 
 			local cacheSize = GetCacheSize()
-			print(
-				string.format("|cff00ff00Fishing Info Panel loaded! Use /fip config for settings. Cache: %d catches|r", cacheSize)
-			)
+			FIP:ShowWelcomeMessage()
+			print(string.format("|cff00ff00Cache: %d catches loaded|r", cacheSize))
 		end
 	elseif event == "UNIT_SPELLCAST_CHANNEL_START" then
 		local unit, castGUID, spellID = ...
@@ -947,6 +982,25 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 				if FishingInfoPanelDB.config.debugLogging then
 					print("|cff00ff00FishingInfoPanel Debug:|r Fishing channel started")
 				end
+
+				-- Auto-open panel if enabled
+				if FishingInfoPanelDB.config.autoOpen and not FishingInfoPanelFrame:IsShown() then
+					FishingInfoPanelFrame:Show()
+					FIP:UpdateDisplay()
+					FIP.autoOpened = true
+					if FishingInfoPanelDB.config.debugLogging then
+						print("|cff00ff00FishingInfoPanel Debug:|r Auto-opened panel")
+					end
+				end
+			end
+		end
+	elseif event == "PLAYER_REGEN_DISABLED" then
+		-- Auto-close panel if it was auto-opened and combat started
+		if FIP.autoOpened and FishingInfoPanelDB.config.autoOpen and FishingInfoPanelFrame:IsShown() then
+			FishingInfoPanelFrame:Hide()
+			FIP.autoOpened = false
+			if FishingInfoPanelDB.config.debugLogging then
+				print("|cff00ff00FishingInfoPanel Debug:|r Auto-closed panel (combat started)")
 			end
 		end
 	elseif event == "LOOT_OPENED" then
