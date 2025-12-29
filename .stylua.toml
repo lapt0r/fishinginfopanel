@@ -2,7 +2,7 @@
 # See https://github.com/JohnnyMorganz/StyLua for more information
 
 column_width = 120
-line_endings = "Windows"
+line_endings = "Unix"
 indent_type = "Tabs"
 indent_width = 1
 quote_style = "AutoPreferDouble"
