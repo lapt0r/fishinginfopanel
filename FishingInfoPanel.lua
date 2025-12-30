@@ -20,6 +20,7 @@ local function MigrateV1ToV2(db)
 			showCatchMessages = true,
 			debugLogging = false,
 			autoOpen = true,
+			showMinimapButton = true,
 		}
 	end
 
@@ -38,6 +39,11 @@ local function MigrateV1ToV2(db)
 	-- Ensure autoOpen config exists
 	if db.config and db.config.autoOpen == nil then
 		db.config.autoOpen = true
+	end
+
+	-- Ensure showMinimapButton config exists
+	if db.config and db.config.showMinimapButton == nil then
+		db.config.showMinimapButton = true
 	end
 
 	-- Add version field
@@ -71,6 +77,7 @@ local function InitDB()
 				showCatchMessages = true,
 				debugLogging = false,
 				autoOpen = true,
+				showMinimapButton = true,
 			},
 			-- Catch rate tracking
 			catchHistory = {}, -- Array of {time = timestamp, itemID = id}
@@ -115,6 +122,48 @@ local function InitDB()
 	FishingInfoPanelDB.lastCatchTimes = {}
 end
 
+-- Default configuration values
+local DEFAULT_CONFIG = {
+	showCatchMessages = true,
+	debugLogging = false,
+	autoOpen = true,
+	showMinimapButton = true,
+}
+
+-- Settings facade for safe config access
+function FIP:GetConfig(key)
+	-- Ensure database and config exist
+	if not FishingInfoPanelDB then
+		return DEFAULT_CONFIG[key]
+	end
+
+	if not FishingInfoPanelDB.config then
+		FishingInfoPanelDB.config = {}
+	end
+
+	-- Return value or default
+	local value = FishingInfoPanelDB.config[key]
+	if value == nil then
+		return DEFAULT_CONFIG[key]
+	end
+
+	return value
+end
+
+-- Settings facade for safe config setting
+function FIP:SetConfig(key, value)
+	-- Ensure database and config exist
+	if not FishingInfoPanelDB then
+		return
+	end
+
+	if not FishingInfoPanelDB.config then
+		FishingInfoPanelDB.config = {}
+	end
+
+	FishingInfoPanelDB.config[key] = value
+end
+
 -- State
 FIP.showingAllTime = false
 FIP.showingBySkill = false
@@ -125,6 +174,97 @@ FIP.fishRows = {}
 FIP.fishingStartTime = nil
 FIP.lastTimeToCatch = {}
 FIP.autoOpened = false
+
+-- Minimap button setup
+local minimapButton = CreateFrame("Button", "FishingInfoPanelMinimapButton", Minimap)
+minimapButton:SetSize(32, 32)
+minimapButton:SetFrameStrata("MEDIUM")
+minimapButton:SetFrameLevel(8)
+minimapButton:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+minimapButton:RegisterForDrag("LeftButton")
+
+-- Set normal, pushed and highlight textures to match WoW style
+minimapButton:SetNormalTexture("Interface\\Minimap\\UI-Minimap-ZoomButton")
+minimapButton:SetPushedTexture("Interface\\Minimap\\UI-Minimap-ZoomButton")
+minimapButton:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
+
+-- Get textures and resize them
+local normalTexture = minimapButton:GetNormalTexture()
+local pushedTexture = minimapButton:GetPushedTexture()
+local highlightTexture = minimapButton:GetHighlightTexture()
+
+if normalTexture then normalTexture:SetSize(52, 52) end
+if pushedTexture then pushedTexture:SetSize(52, 52) end
+if highlightTexture then highlightTexture:SetSize(52, 52) end
+
+-- Minimap button icon
+local icon = minimapButton:CreateTexture(nil, "ARTWORK")
+icon:SetSize(20, 20)
+icon:SetPoint("CENTER", 0, 1)
+icon:SetTexture(132931) -- Fishing hook icon
+
+-- Minimap button position
+local function UpdateMinimapButtonPosition()
+	local angle = math.rad(FishingInfoPanelDB.minimapPos or 225)
+	-- Calculate radius based on minimap size
+	local minimapSize = Minimap:GetWidth()
+	local radius = minimapSize / 2 + 10  -- Place button slightly outside minimap edge
+	local x, y = math.cos(angle) * radius, math.sin(angle) * radius
+	minimapButton:ClearAllPoints()
+	minimapButton:SetPoint("CENTER", Minimap, "CENTER", x, y)
+end
+
+-- Minimap button dragging
+minimapButton:SetMovable(true)
+minimapButton:SetScript("OnDragStart", function(self)
+	self:SetScript("OnUpdate", function(self)
+		local mx, my = Minimap:GetCenter()
+		local px, py = GetCursorPosition()
+		local scale = UIParent:GetEffectiveScale()
+		px, py = px / scale, py / scale
+		local angle = math.deg(math.atan2(py - my, px - mx))
+		-- Normalize angle to 0-360
+		if angle < 0 then angle = angle + 360 end
+		FishingInfoPanelDB.minimapPos = angle
+		UpdateMinimapButtonPosition()
+	end)
+end)
+
+minimapButton:SetScript("OnDragStop", function(self)
+	self:SetScript("OnUpdate", nil)
+end)
+
+-- Minimap button tooltip
+minimapButton:SetScript("OnEnter", function(self)
+	GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+	GameTooltip:SetText("Fishing Info Panel", 1, 1, 1)
+	GameTooltip:AddLine("Left click: Toggle panel", 0.7, 0.7, 0.7)
+	GameTooltip:AddLine("Right click: Toggle skill view", 0.7, 0.7, 0.7)
+	GameTooltip:Show()
+end)
+
+minimapButton:SetScript("OnLeave", function(self)
+	GameTooltip:Hide()
+end)
+
+-- Minimap button click handlers
+minimapButton:SetScript("OnClick", function(self, button)
+	if button == "LeftButton" then
+		FIP:ToggleFrame()
+	elseif button == "RightButton" then
+		FIP:ToggleSkillView()
+	end
+end)
+
+-- Show/hide minimap button
+function FIP:UpdateMinimapButton()
+	if FIP:GetConfig("showMinimapButton") then
+		minimapButton:Show()
+		UpdateMinimapButtonPosition()
+	else
+		minimapButton:Hide()
+	end
+end
 
 -- Get current location
 local function GetCurrentLocation()
@@ -277,7 +417,7 @@ local function GetExpectedTimeToFish(itemID, zone, subzone)
 
 	-- Check for edge cases to prevent errors
 	if probability >= 1 or probability <= 0 then
-		if FishingInfoPanelDB.config.debugLogging then
+		if FIP:GetConfig("debugLogging") then
 			print(
 				string.format(
 					"|cff00ff00FishingInfoPanel Debug:|r Error computing PMF for item %s: invalid probability %.4f",
@@ -294,7 +434,7 @@ local function GetExpectedTimeToFish(itemID, zone, subzone)
 	end)
 
 	if not success or expectedCasts <= 0 or expectedCasts == math.huge then
-		if FishingInfoPanelDB.config.debugLogging then
+		if FIP:GetConfig("debugLogging") then
 			print(
 				string.format("|cff00ff00FishingInfoPanel Debug:|r Error computing PMF projected catch time for item %s", itemID)
 			)
@@ -346,7 +486,7 @@ function FIP:RecordCatch(itemID)
 	FishingInfoPanelDB.catchHistory = newHistory
 
 	-- Catch logging (if enabled)
-	if FishingInfoPanelDB.config.showCatchMessages then
+	if FIP:GetConfig("showCatchMessages") then
 		local itemName = GetItemInfo(itemID) or ("Item " .. itemID)
 		local castTimeText = ""
 		if FIP.fishingStartTime then
@@ -365,7 +505,7 @@ function FIP:RecordCatch(itemID)
 	end
 
 	-- Debug logging (if enabled)
-	if FishingInfoPanelDB.config.debugLogging then
+	if FIP:GetConfig("debugLogging") then
 		local itemName = GetItemInfo(itemID) or ("Item " .. itemID)
 		print(
 			string.format(
@@ -851,34 +991,43 @@ end
 
 -- Toggle catch messages
 function FIP:ToggleCatchMessages()
-	FishingInfoPanelDB.config.showCatchMessages = not FishingInfoPanelDB.config.showCatchMessages
-	local status = FishingInfoPanelDB.config.showCatchMessages and "enabled" or "disabled"
+	FIP:SetConfig("showCatchMessages", not FIP:GetConfig("showCatchMessages"))
+	local status = FIP:GetConfig("showCatchMessages") and "enabled" or "disabled"
 	print("|cff00ff00FishingInfoPanel:|r Catch messages " .. status)
 end
 
 -- Toggle debug logging
 function FIP:ToggleDebugLogging()
-	FishingInfoPanelDB.config.debugLogging = not FishingInfoPanelDB.config.debugLogging
-	local status = FishingInfoPanelDB.config.debugLogging and "enabled" or "disabled"
+	FIP:SetConfig("debugLogging", not FIP:GetConfig("debugLogging"))
+	local status = FIP:GetConfig("debugLogging") and "enabled" or "disabled"
 	print("|cff00ff00FishingInfoPanel:|r Debug logging " .. status)
 end
 
 -- Toggle auto open/close
 function FIP:ToggleAutoOpen()
-	FishingInfoPanelDB.config.autoOpen = not FishingInfoPanelDB.config.autoOpen
-	local status = FishingInfoPanelDB.config.autoOpen and "enabled" or "disabled"
+	FIP:SetConfig("autoOpen", not FIP:GetConfig("autoOpen"))
+	local status = FIP:GetConfig("autoOpen") and "enabled" or "disabled"
 	print("|cff00ff00FishingInfoPanel:|r Auto open/close " .. status)
+end
+
+-- Toggle minimap button
+function FIP:ToggleMinimapButton()
+	FIP:SetConfig("showMinimapButton", not FIP:GetConfig("showMinimapButton"))
+	FIP:UpdateMinimapButton()
+	local status = FIP:GetConfig("showMinimapButton") and "enabled" or "disabled"
+	print("|cff00ff00FishingInfoPanel:|r Minimap button " .. status)
 end
 
 -- Show welcome message with all commands
 function FIP:ShowWelcomeMessage()
-	print("|cff00ff00=== Fishing Info Panel v1.2.3 ===|r")
+	print("|cff00ff00=== Fishing Info Panel v1.3.0 ===|r")
 	print("|cffff9900Available Commands:|r")
 	print("  |cff00ff00/fip|r - Toggle panel visibility")
 	print("  |cff00ff00/fip skill|r - Toggle skill-based view")
 	print("  |cff00ff00/fip catch|r - Toggle catch messages")
 	print("  |cff00ff00/fip debug|r - Toggle debug logging")
 	print("  |cff00ff00/fip auto|r - Toggle auto open/close on fishing")
+	print("  |cff00ff00/fip minimap|r - Toggle minimap button")
 	print("  |cff00ff00/fip config|r - Show current settings")
 	print("  |cff00ff00/fip help|r - Show this help message")
 	print("|cffff9900Happy fishing!|r")
@@ -887,9 +1036,10 @@ end
 -- Show configuration
 function FIP:ShowConfig()
 	print("|cff00ff00FishingInfoPanel Configuration:|r")
-	print("  Catch messages: " .. (FishingInfoPanelDB.config.showCatchMessages and "enabled" or "disabled"))
-	print("  Debug logging: " .. (FishingInfoPanelDB.config.debugLogging and "enabled" or "disabled"))
-	print("  Auto open/close: " .. (FishingInfoPanelDB.config.autoOpen and "enabled" or "disabled"))
+	print("  Catch messages: " .. (FIP:GetConfig("showCatchMessages") and "enabled" or "disabled"))
+	print("  Debug logging: " .. (FIP:GetConfig("debugLogging") and "enabled" or "disabled"))
+	print("  Auto open/close: " .. (FIP:GetConfig("autoOpen") and "enabled" or "disabled"))
+	print("  Minimap button: " .. (FIP:GetConfig("showMinimapButton") and "enabled" or "disabled"))
 	print("  Database version: " .. (FishingInfoPanelDB[DB_VERSION_KEY] or "unknown"))
 end
 
@@ -947,6 +1097,9 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 			})
 			FishingInfoPanelFrame:SetBackdropColor(1, 1, 1, 1)
 
+			-- Initialize minimap button
+			FIP:UpdateMinimapButton()
+
 			-- Register slash command
 			SLASH_FISHINGINFO1 = "/fishinfo"
 			SLASH_FISHINGINFO2 = "/fip"
@@ -960,6 +1113,8 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 					FIP:ToggleDebugLogging()
 				elseif msg == "auto" then
 					FIP:ToggleAutoOpen()
+				elseif msg == "minimap" then
+					FIP:ToggleMinimapButton()
 				elseif msg == "config" then
 					FIP:ShowConfig()
 				elseif msg == "help" then
@@ -979,12 +1134,12 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 			local name, text, texture, startTimeMS, endTimeMS = UnitChannelInfo("player")
 			if name == "Fishing" then
 				FIP.fishingStartTime = GetTime()
-				if FishingInfoPanelDB.config.debugLogging then
+				if FIP:GetConfig("debugLogging") then
 					print("|cff00ff00FishingInfoPanel Debug:|r Fishing channel started")
 				end
 
 				-- Auto-open panel if enabled
-				if FishingInfoPanelDB.config.autoOpen and not FishingInfoPanelFrame:IsShown() then
+				if FIP:GetConfig("autoOpen") and not FishingInfoPanelFrame:IsShown() then
 					FishingInfoPanelFrame:Show()
 					FIP:UpdateDisplay()
 					FIP.autoOpened = true
@@ -996,7 +1151,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 		end
 	elseif event == "PLAYER_REGEN_DISABLED" then
 		-- Auto-close panel if it was auto-opened and combat started
-		if FIP.autoOpened and FishingInfoPanelDB.config.autoOpen and FishingInfoPanelFrame:IsShown() then
+		if FIP.autoOpened and FIP:GetConfig("autoOpen") and FishingInfoPanelFrame:IsShown() then
 			FishingInfoPanelFrame:Hide()
 			FIP.autoOpened = false
 			if FishingInfoPanelDB.config.debugLogging then
