@@ -2,10 +2,37 @@
 
 ## [Unreleased] - Release Candidate
 
-### [CHORE]
-- Added pre-commit configuration with StyLua, Semgrep, and gitleaks for code quality
-- Created GitHub Actions workflow for automated linting and security checks
-- Configured Lua formatting rules optimized for WoW addon development
+## [1.3.1] - 2025-12-31
+
+### [FIX]
+- Fixed auto-open localization issue for non-English WoW clients
+- Improved fishing spell detection using spell IDs instead of hardcoded strings
+- Added debug logging for fishing spell detection
+
+## [1.3.0] - 2025-12-31
+
+### [FEATURE]
+- Added draggable minimap button with fishing hook icon
+- Added `/fip minimap` command to toggle minimap button visibility
+- Created settings facade for safe configuration access with defaults
+- Minimap button enabled by default for better user experience
+
+### [ENHANCEMENT]
+- All configuration access now uses safe facade with default fallbacks
+- Minimap button matches standard WoW appearance and behavior
+- Improved configuration management and safety
+
+## [1.2.3] - 2025-12-31
+
+### [FEATURE]
+- Added auto open/close functionality - panel opens on fishing start, closes on combat start
+- Added `/fip auto` command to toggle auto open/close (enabled by default)
+- Added comprehensive welcome message with all available commands
+- Added `/fip help` command to display welcome message
+
+### [ENHANCEMENT]
+- Enhanced load message with comprehensive command list
+- Better onboarding experience with welcome message
 
 ## [1.2.2] - 2025-12-28
 
