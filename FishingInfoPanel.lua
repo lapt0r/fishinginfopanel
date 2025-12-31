@@ -1132,7 +1132,9 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 		local unit, castGUID, spellID = ...
 		if unit == "player" then
 			local name, text, texture, startTimeMS, endTimeMS = UnitChannelInfo("player")
-			if name == "Fishing" then
+			-- Get localized fishing spell name using spell ID 7620 (basic fishing)
+			local fishingSpellName = GetSpellInfo(7620)
+			if name == fishingSpellName then
 				FIP.fishingStartTime = GetTime()
 				if FIP:GetConfig("debugLogging") then
 					print("|cff00ff00FishingInfoPanel Debug:|r Fishing channel started")
