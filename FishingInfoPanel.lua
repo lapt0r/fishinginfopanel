@@ -5,6 +5,11 @@ local FIP = FishingInfoPanel
 local DB_VERSION = 2
 local DB_VERSION_KEY = "dbVersion"
 
+local FISHING_SPELL_IDS = {
+	-- 11.x
+	[131476] = true,
+}
+
 -- Database migration functions
 local function MigrateV1ToV2(db)
 	-- V1 databases have no version field and may be missing some fields
@@ -1020,7 +1025,7 @@ end
 
 -- Show welcome message with all commands
 function FIP:ShowWelcomeMessage()
-	print("|cff00ff00=== Fishing Info Panel v1.3.0 ===|r")
+	print("|cff00ff00=== Fishing Info Panel v1.3.1 ===|r")
 	print("|cffff9900Available Commands:|r")
 	print("  |cff00ff00/fip|r - Toggle panel visibility")
 	print("  |cff00ff00/fip skill|r - Toggle skill-based view")
@@ -1131,20 +1136,12 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 	elseif event == "UNIT_SPELLCAST_CHANNEL_START" then
 		local unit, castGUID, spellID = ...
 		if unit == "player" then
-			local name, text, texture, startTimeMS, endTimeMS = UnitChannelInfo("player")
-			-- Get localized fishing spell name using spell ID 7620 (basic fishing)
-			local fishingSpellName = GetSpellInfo(7620)
-
-			-- Always log what we're comparing when debug is on
-			if FIP:GetConfig("debugLogging") and name then
-				print(string.format("|cff00ff00FishingInfoPanel Debug:|r Channel started: '%s' (spell ID from event: %s)",
-					name or "nil", tostring(spellID)))
-				print(string.format("|cff00ff00FishingInfoPanel Debug:|r Comparing to GetSpellInfo(7620): '%s'",
-					fishingSpellName or "nil"))
+			if FIP:GetConfig("debugLogging") then
+				print(string.format("|cff00ff00FishingInfoPanel Debug:|r channel started - %s", tostring(spellID)))
 			end
+			local name, text, texture, startTimeMS, endTimeMS = UnitChannelInfo("player")
 
-			-- For now, check both the spell name and hardcoded "Fishing" as fallback
-			if name and (name == fishingSpellName or name == "Fishing") then
+			if spellID and (FISHING_SPELL_IDS[spellID] ~= nil) then
 				FIP.fishingStartTime = GetTime()
 				if FIP:GetConfig("debugLogging") then
 					print("|cff00ff00FishingInfoPanel Debug:|r Fishing channel started")
