@@ -1134,7 +1134,17 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 			local name, text, texture, startTimeMS, endTimeMS = UnitChannelInfo("player")
 			-- Get localized fishing spell name using spell ID 7620 (basic fishing)
 			local fishingSpellName = GetSpellInfo(7620)
-			if name == fishingSpellName then
+
+			-- Always log what we're comparing when debug is on
+			if FIP:GetConfig("debugLogging") and name then
+				print(string.format("|cff00ff00FishingInfoPanel Debug:|r Channel started: '%s' (spell ID from event: %s)",
+					name or "nil", tostring(spellID)))
+				print(string.format("|cff00ff00FishingInfoPanel Debug:|r Comparing to GetSpellInfo(7620): '%s'",
+					fishingSpellName or "nil"))
+			end
+
+			-- For now, check both the spell name and hardcoded "Fishing" as fallback
+			if name and (name == fishingSpellName or name == "Fishing") then
 				FIP.fishingStartTime = GetTime()
 				if FIP:GetConfig("debugLogging") then
 					print("|cff00ff00FishingInfoPanel Debug:|r Fishing channel started")
