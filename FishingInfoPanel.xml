@@ -139,6 +139,29 @@
 				</Layers>
 			</Frame>
 
+			<!-- Derby Dasher Timer -->
+			<Frame name="$parentDerbyDasherFrame">
+				<Size x="110" y="24"/>
+				<Anchors>
+					<Anchor point="TOPRIGHT" x="-40" y="-30"/>
+				</Anchors>
+				<Layers>
+					<Layer level="ARTWORK">
+						<Texture name="$parentIcon" hidden="true">
+							<Size x="20" y="20"/>
+							<Anchors>
+								<Anchor point="LEFT" x="0" y="0"/>
+							</Anchors>
+						</Texture>
+						<FontString name="$parentText" inherits="GameFontNormalSmall">
+							<Anchors>
+								<Anchor point="RIGHT" x="0" y="0"/>
+							</Anchors>
+						</FontString>
+					</Layer>
+				</Layers>
+			</Frame>
+
 			<!-- Close Button -->
 			<Button name="$parentCloseButton" inherits="UIPanelCloseButton">
 				<Anchors>

@@ -179,6 +179,7 @@ FIP.fishRows = {}
 FIP.fishingStartTime = nil
 FIP.lastTimeToCatch = {}
 FIP.autoOpened = false
+FIP.panelPosition = nil
 
 -- Minimap button setup
 local minimapButton = CreateFrame("Button", "FishingInfoPanelMinimapButton", Minimap)
@@ -783,6 +784,75 @@ local function GetFishDataBySkill(skillRange)
 	return fishData
 end
 
+-- Check for Derby Dasher buff and return time remaining in seconds
+local function GetDerbyDasherTimeRemaining()
+	-- Derby Dasher spell ID is 456024 (quest-granted buff)
+	local DERBY_DASHER_SPELL_ID = 456024
+
+	-- Use C_UnitAuras API to get aura data by spell ID
+	local auraData = C_UnitAuras.GetPlayerAuraBySpellID(DERBY_DASHER_SPELL_ID)
+
+	if auraData and auraData.expirationTime and auraData.expirationTime > 0 then
+		local timeRemaining = auraData.expirationTime - GetTime()
+		return timeRemaining > 0 and timeRemaining or 0
+	end
+
+	return 0
+end
+
+-- Update Derby Dasher buff display
+local function UpdateDerbyDasherDisplay()
+	local text = FishingInfoPanelFrameDerbyDasherFrameText
+	local icon = FishingInfoPanelFrameDerbyDasherFrameIcon
+
+	-- Safety check - make sure the UI elements exist
+	if not text or not icon then
+		if FIP:GetConfig("debugLogging") then
+			print("|cffff0000FishingInfoPanel Debug:|r Derby Dasher frame elements not found!")
+		end
+		return
+	end
+
+	local timeRemaining = GetDerbyDasherTimeRemaining()
+
+	if FIP:GetConfig("debugLogging") and timeRemaining > 0 then
+		print(string.format("|cff00ff00FishingInfoPanel Debug:|r Derby Dasher time remaining: %.0f seconds", timeRemaining))
+	end
+
+	if timeRemaining > 0 then
+		-- Get Derby Dasher spell icon (spell ID 456024)
+		local DERBY_DASHER_SPELL_ID = 456024
+		local spellTexture = C_Spell.GetSpellTexture(DERBY_DASHER_SPELL_ID)
+
+		-- Show icon
+		if spellTexture then
+			icon:SetTexture(spellTexture)
+			icon:Show()
+		end
+
+		-- Format as MM:SS
+		local minutes = math.floor(timeRemaining / 60)
+		local seconds = math.floor(timeRemaining % 60)
+		local timeText = string.format("%02d:%02d", minutes, seconds)
+		text:SetText(timeText)
+
+		-- Color based on time remaining
+		local timeInMinutes = timeRemaining / 60
+		if timeInMinutes > 30 then
+			text:SetTextColor(0, 1, 0) -- Green
+		elseif timeInMinutes > 15 then
+			text:SetTextColor(1, 1, 0) -- Yellow
+		else
+			text:SetTextColor(1, 0, 0) -- Red
+		end
+
+		text:Show()
+	else
+		text:Hide()
+		icon:Hide()
+	end
+end
+
 -- Update the display
 function FIP:UpdateDisplay()
 	local fishData
@@ -974,6 +1044,9 @@ function FIP:UpdateDisplay()
 	end
 
 	FishingInfoPanelFrameCatchRateFrameText:SetText(statsText)
+
+	-- Update Derby Dasher buff display
+	UpdateDerbyDasherDisplay()
 end
 
 -- Toggle between session and all-time view
@@ -1048,6 +1121,20 @@ function FIP:ShowConfig()
 	print("  Database version: " .. (FishingInfoPanelDB[DB_VERSION_KEY] or "unknown"))
 end
 
+-- Show all current buffs (for debugging Derby Dasher)
+function FIP:ShowBuffs()
+	print("|cff00ff00FishingInfoPanel - Current Buffs:|r")
+	local count = 0
+	AuraUtil.ForEachAura("player", "HELPFUL", nil, function(auraData)
+		count = count + 1
+		local remaining = auraData.expirationTime and (auraData.expirationTime - GetTime()) or 0
+		print(string.format("  [%d] %s [ID: %s] (%.0f seconds remaining)", count, auraData.name, tostring(auraData.spellId), remaining))
+	end)
+	if count == 0 then
+		print("  No buffs found")
+	end
+end
+
 -- Toggle frame visibility
 function FIP:ToggleFrame()
 	if FishingInfoPanelFrame:IsShown() then
@@ -1057,6 +1144,8 @@ function FIP:ToggleFrame()
 	else
 		FishingInfoPanelFrame:Show()
 		FIP:UpdateDisplay()
+		-- Immediately update Derby Dasher display when showing frame
+		UpdateDerbyDasherDisplay()
 	end
 end
 
@@ -1105,6 +1194,27 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 			-- Initialize minimap button
 			FIP:UpdateMinimapButton()
 
+			-- Test Derby Dasher frame exists
+			if FishingInfoPanelFrameDerbyDasherFrameText then
+				print("|cff00ff00FishingInfoPanel:|r Derby Dasher timer frame loaded successfully")
+			else
+				print("|cffff0000FishingInfoPanel:|r Derby Dasher timer frame NOT found!")
+			end
+
+			-- Set up OnUpdate handler for Derby Dasher timer
+			local timeSinceLastUpdate = 0
+			FishingInfoPanelFrame:SetScript("OnUpdate", function(self, elapsed)
+				if not self:IsShown() then
+					return
+				end
+
+				timeSinceLastUpdate = timeSinceLastUpdate + elapsed
+				if timeSinceLastUpdate >= 1 then -- Update every second
+					timeSinceLastUpdate = 0
+					UpdateDerbyDasherDisplay()
+				end
+			end)
+
 			-- Register slash command
 			SLASH_FISHINGINFO1 = "/fishinfo"
 			SLASH_FISHINGINFO2 = "/fip"
@@ -1122,6 +1232,8 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 					FIP:ToggleMinimapButton()
 				elseif msg == "config" then
 					FIP:ShowConfig()
+				elseif msg == "buffs" then
+					FIP:ShowBuffs()
 				elseif msg == "help" then
 					FIP:ShowWelcomeMessage()
 				else
@@ -1151,6 +1263,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 				if FIP:GetConfig("autoOpen") and not FishingInfoPanelFrame:IsShown() then
 					FishingInfoPanelFrame:Show()
 					FIP:UpdateDisplay()
+					UpdateDerbyDasherDisplay()
 					FIP.autoOpened = true
 					if FishingInfoPanelDB.config.debugLogging then
 						print("|cff00ff00FishingInfoPanel Debug:|r Auto-opened panel")

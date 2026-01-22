@@ -1,6 +1,14 @@
 # Fishing Info Panel - Patch Notes
 
-## [Unreleased] - Release Candidate
+## [1.4.0] - 2026-01-22
+
+### [FEATURE]
+- Added Derby Dasher buff timer display in upper right corner of panel
+- Timer shows remaining buff time in MM:SS format with color coding (green >30min, yellow >15min, red otherwise)
+- Derby Dasher spell icon displays next to timer when buff is active
+
+### [ENHANCEMENT]
+- Updated to support current WoW retail version (11.x)
 
 ## [1.3.1] - 2025-12-31
 
