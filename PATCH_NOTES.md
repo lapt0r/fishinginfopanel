@@ -1,5 +1,10 @@
 # Fishing Info Panel - Patch Notes
 
+## [12.0.1] - 2026-02-12
+
+### [CHORE]
+- Aligned addon versioning scheme with WoW interface version (12.0.1)
+
 ## [1.4.0] - 2026-01-22
 
 ### [FEATURE]
